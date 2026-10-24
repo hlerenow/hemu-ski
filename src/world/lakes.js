@@ -236,6 +236,10 @@ export function createLakes(lakes) {
         s.cut = mine.length > 0;
       }
     },
+    // The sky the water holds, toward the far shore (the weather sets it).
+    setSky(color) {
+      for (const s of sheets) s.mat.userData.uniforms.uSky.value.copy(color);
+    },
   };
 }
 

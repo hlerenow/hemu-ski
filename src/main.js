@@ -4,6 +4,7 @@ import { loadResort, createResort, along, MAIN_RUN, TREELINE } from './world/res
 import { createBackdrop } from './world/terrain.js';
 import { gondolaCabin } from './world/props.js';
 import { createSky, SKY } from './world/sky.js';
+import { Weather, WEATHERS, SUNRISE, SUNSET } from './world/weather.js';
 import { PUFF_COVER } from './world/onsen.js';
 import { cabinSpace } from './world/summit.js';
 import { SUMMIT } from './world/summit-layout.js';
@@ -40,11 +41,10 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const post = new InkPost(renderer);
 
 const scene = new THREE.Scene();
-scene.background = SKY.horizon;
+scene.background = SKY.horizon.clone();
 scene.fog = new THREE.Fog(SKY.horizon.clone().lerp(new THREE.Color('#ffffff'), 0.15), 900, 17000);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.3, 60000);
 
-const sunDir = new THREE.Vector3(0.62, 0.55, 0.56).normalize();
 const sun = new THREE.DirectionalLight('#ffffff', toonUniforms.uSunIntensity.value);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -99,6 +99,10 @@ scene.add(ripples.group);
 const cabinRoom = cabinSpace(summit.byId.get('summit:object-7')); // the coffee cabin's room, for the dog's home and the camera
 const sky = createSky();
 scene.add(sky);
+// The time of day and the weather (world/weather.js): they light everything
+// and move the sun, so the sun's light is theirs to place. Chosen under
+// Weather in the menu (see below), or ?time=17.2 and ?weather=snow.
+const weather = new Weather({ scene, sky, sun, post, toon: toonUniforms, water });
 
 // Start a few metres below 6号's top station, at the head of Yunxiaofeng.
 // From there the whole mountain is open: there is no finish line.
@@ -395,6 +399,78 @@ for (const b of riderButtons)
   b.addEventListener('click', () => {
     if (b.dataset.rider !== riderWanted) void chooseRider(b.dataset.rider);
   });
+
+// ---------- Weather ----------
+// The menu's Weather panel: the clock (a slider, and quick jumps to sunrise,
+// noon, sunset and night), whether the day goes by on its own, and the kind of
+// weather. Remembered between visits, like the rider; ?time= and ?weather=
+// choose too, for that visit only (a time from the address holds still).
+const wxAddress = new URLSearchParams(location.search);
+const wxClock = document.getElementById('wx-clock'), wxPhase = document.getElementById('wx-phase');
+const wxHour = document.getElementById('wx-hour'), wxRun = document.getElementById('wx-run');
+const wxKinds = [...document.querySelectorAll('#fly-weather [data-weather]')];
+const WX_HOURS = { sunrise: SUNRISE + 0.25, noon: 12, sunset: SUNSET - 0.35, night: 22.5 };
+const showWeather = () => {
+  for (const b of wxKinds) b.setAttribute('aria-pressed', String(b.dataset.weather === weather.kind));
+};
+let wxFromAddress = wxAddress.has('time') || wxAddress.has('weather');
+function saveWeather() {
+  if (wxFromAddress) return;
+  Object.assign(menu.prefs, { weather: weather.kind, hour: Math.round(weather.hour * 100) / 100, dayGoesBy: weather.running });
+  menu.save();
+}
+{
+  const hourParam = parseFloat(wxAddress.get('time'));
+  const kind = [wxAddress.get('weather'), menu.prefs.weather].find((k) => k === 'changeable' || k in WEATHERS);
+  if (kind) weather.set(kind);
+  weather.settle();
+  if (Number.isFinite(hourParam)) {
+    weather.hour = THREE.MathUtils.euclideanModulo(hourParam, 24);
+    weather.running = false;
+  } else {
+    if (Number.isFinite(menu.prefs.hour)) weather.hour = menu.prefs.hour;
+    weather.running = menu.prefs.dayGoesBy !== false;
+  }
+  wxRun.checked = weather.running;
+  showWeather();
+}
+let wxDragging = false;
+wxHour.addEventListener('pointerdown', () => (wxDragging = true));
+window.addEventListener('pointerup', () => (wxDragging = false));
+wxHour.addEventListener('input', () => {
+  weather.hour = parseFloat(wxHour.value) % 24;
+  wxFromAddress = false;
+  saveWeather();
+});
+for (const b of document.querySelectorAll('#fly-weather [data-hour]'))
+  b.addEventListener('click', () => {
+    weather.hour = WX_HOURS[b.dataset.hour];
+    wxFromAddress = false;
+    saveWeather();
+  });
+wxRun.addEventListener('change', () => {
+  weather.running = wxRun.checked;
+  wxFromAddress = false;
+  saveWeather();
+});
+for (const b of wxKinds)
+  b.addEventListener('click', () => {
+    weather.set(b.dataset.weather);
+    showWeather();
+    wxFromAddress = false;
+    saveWeather();
+  });
+window.addEventListener('pagehide', saveWeather);
+// The clock, kept up while the panel's open (and the slider with it, unless
+// it's in your hand).
+function updateWeatherPanel() {
+  if (document.getElementById('fly-weather').classList.contains('hidden')) return;
+  const m = Math.floor(weather.hour * 60);
+  wxClock.value = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  wxPhase.textContent = weather.kind === 'changeable' ? `${weather.phase} · ${WEATHERS[weather.current].label.toLowerCase()}` : weather.phase;
+  if (!wxDragging) wxHour.value = weather.hour.toFixed(2);
+}
+
 const riderParam = new URLSearchParams(location.search).get('rider');
 void chooseRider([riderParam, menu.prefs.rider].find((id) => RIDERS.includes(id)) ?? 'male');
 
@@ -532,7 +608,6 @@ function setLens(fov, dist) {
 // ?notitle skips straight to the panel at the top station.
 const TITLE_FOV = 30;
 const TITLE_ELEVATION = THREE.MathUtils.degToRad(24);
-const FOG = { near: scene.fog.near, far: scene.fog.far };
 const island = createIsland(detail, piste, { ...meta.detail, treeline: TREELINE });
 const letters = createTitleLetters();
 const specks = createSnowSpecks();
@@ -562,8 +637,7 @@ function setTitleWorld(on) {
   island.visible = on;
   backdrop.visible = !on;
   sky.material.uniforms.uFloat.value = on ? 1 : 0;
-  scene.fog.near = on ? 1e7 : FOG.near;
-  scene.fog.far = on ? 2e7 : FOG.far;
+  weather.title = on;
 }
 let titleDist = 1;
 function updateTitleCamera(dt) {
@@ -899,11 +973,11 @@ function frame() {
   if (debug.cam) debug.cam(camera, phys);
   sky.position.copy(camera.position);
   sky.material.uniforms.uTime.value = time;
-  sun.target.position.copy(phys.pos);
-  sun.position.copy(phys.pos).addScaledVector(sunDir, 250);
+  weather.update(dt, { time, camera, viewHeight: renderer.domElement.height, focus: phys.pos });
+  updateWeatherPanel();
 
   // Normal-edge lines fade out by ~600 m, so far geometry can skip that pass.
-  post.render(scene, camera, time, [sky, spray.points, dog.spray.points, specks.points, backdrop, ripples.group, ...forest.farMeshes, ...marks.hidden]);
+  post.render(scene, camera, time, [sky, weather.snowfall.points, spray.points, dog.spray.points, specks.points, backdrop, ripples.group, ...forest.farMeshes, ...marks.hidden]);
   requestAnimationFrame(frame);
 }
 
@@ -1828,5 +1902,5 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { phys, rider, camera, scene, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { phys, rider, camera, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
 requestAnimationFrame(frame);

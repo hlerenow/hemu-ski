@@ -80,6 +80,13 @@
             <path d="M12 6v14.5M8.5 15h2M13.5 15h2" />
           </svg>
         </button>
+        <button class="mi" data-flyout="weather" data-tip="Weather &amp; time" aria-label="Weather &amp; time" aria-expanded="false" aria-controls="fly-weather">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle fill="#f0c24a" cx="9" cy="9" r="4.2" />
+            <path d="M9 1.8v1.6M2.6 9H1M3.9 3.9l1.1 1.1M14.1 3.9 13 5" />
+            <path fill="#fbfaf5" d="M7.5 20.5h11a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.5 1.2 3 3 0 0 0-1.8 5.8z" />
+          </svg>
+        </button>
         <button class="mi" data-flyout="settings" data-tip="Settings" aria-label="Settings" aria-expanded="false" aria-controls="fly-settings">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path fill="#c9d3d6" d="M19.2 10.2L21.9 10.9L21.9 13.1L19.2 13.8A7.4 7.4 0 0 1 18.4 15.8L19.8 18.3L18.3 19.8L15.8 18.4A7.4 7.4 0 0 1 13.8 19.2L13.1 21.9L10.9 21.9L10.2 19.2A7.4 7.4 0 0 1 8.2 18.4L5.7 19.8L4.2 18.3L5.6 15.8A7.4 7.4 0 0 1 4.8 13.8L2.1 13.1L2.1 10.9L4.8 10.2A7.4 7.4 0 0 1 5.6 8.2L4.2 5.7L5.7 4.2L8.2 5.6A7.4 7.4 0 0 1 10.2 4.8L10.9 2.1L13.1 2.1L13.8 4.8A7.4 7.4 0 0 1 15.8 5.6L18.3 4.2L19.8 5.7L18.4 8.2A7.4 7.4 0 0 1 19.2 10.2Z" />
@@ -126,6 +133,25 @@
           <li>Gloves</li><li>Pants</li><li>Board</li>
         </ul>
         <p class="soon">Coming soon</p>
+      </section>
+      <section class="flyout hidden" id="fly-weather" aria-label="Weather &amp; time">
+        <div class="tab">Weather &amp; time</div>
+        <p class="clock"><output id="wx-clock">10:30</output> <span id="wx-phase">Morning</span></p>
+        <input type="range" id="wx-hour" min="0" max="24" step="0.05" value="10.5" aria-label="Time of day">
+        <div class="choices wx-times" role="group" aria-label="Go to">
+          <button type="button" data-hour="sunrise">Sunrise</button>
+          <button type="button" data-hour="noon">Noon</button>
+          <button type="button" data-hour="sunset">Sunset</button>
+          <button type="button" data-hour="night">Night</button>
+        </div>
+        <label class="check"><input type="checkbox" id="wx-run"> Let the day go by</label>
+        <div class="choices wx-kinds" role="group" aria-label="Weather">
+          <button type="button" data-weather="clear" aria-pressed="false">Clear</button>
+          <button type="button" data-weather="cloudy" aria-pressed="false">Cloudy</button>
+          <button type="button" data-weather="snow" aria-pressed="false">Snowing</button>
+          <button type="button" data-weather="blizzard" aria-pressed="false">Blizzard</button>
+          <button type="button" data-weather="changeable" aria-pressed="false" class="wide">Changeable</button>
+        </div>
       </section>
       <section class="flyout hidden" id="fly-settings" aria-label="Settings">
         <div class="tab">Settings</div>

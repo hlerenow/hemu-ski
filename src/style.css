@@ -244,6 +244,25 @@ body {
 #menu .riders button:hover { transform: translateY(-1px); }
 #menu .riders button:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
 #menu .riders button:focus-visible { outline: 3px solid var(--tab); outline-offset: 2px; }
+/* Weather & time: the clock over a slider, quick times, and the weather's
+   kinds, two to a row, the one showing lit. */
+#menu .clock { margin: 0 0 4px; font-size: 17px; }
+#menu .clock output { font-family: 'Patrick Hand SC', cursive; font-size: 26px; letter-spacing: 1px; margin-right: 6px; }
+#menu input[type='range'] { width: 100%; margin: 0 0 10px; accent-color: var(--ink); }
+#menu .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 0 0 12px; }
+#menu .wx-times { grid-template-columns: repeat(4, 1fr); gap: 5px; }
+#menu .choices button {
+  font: inherit; font-size: 17px; color: var(--ink); cursor: pointer; padding: 1px 4px 3px;
+  background: #fff; border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--ink);
+}
+#menu .wx-times button { font-size: 15px; padding: 1px 0 3px; }
+#menu .choices .wide { grid-column: 1 / -1; }
+#menu .choices button[aria-pressed='true'] { background: var(--accent); }
+#menu .choices button:hover { transform: translateY(-1px); }
+#menu .choices button:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
+#menu .choices button:focus-visible { outline: 3px solid var(--tab); outline-offset: 2px; }
+#menu .check { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 17px; cursor: pointer; }
+#menu .check input { width: 18px; height: 18px; accent-color: var(--ink); margin: 0; }
 #menu .keys { font-size: 16px; line-height: 1.6; }
 #menu .touch-keys, #menu .toggle { display: none; }
 #menu kbd {

@@ -23,6 +23,7 @@ uniform float uLineWidth;
 uniform float uLineOpacity;
 uniform vec3 uInk;
 uniform vec3 uFogInk;
+uniform vec2 uFogRange;
 varying vec2 vUv;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -80,7 +81,7 @@ void main() {
 
   vec3 col = texture2D(tColor, vUv).rgb;
   // Distant lines fade toward the haze color instead of staying black.
-  float far = smoothstep(800.0, 14000.0, dc);
+  float far = smoothstep(uFogRange.x, uFogRange.y, dc);
   vec3 ink = mix(uInk, uFogInk, far);
   col = mix(col, ink, edge * uLineOpacity * mix(1.0, 0.6, far));
 
@@ -125,6 +126,7 @@ export class InkPost {
         uLineOpacity: { value: lineOpacity },
         uInk: { value: new THREE.Color('#1f2a33') },
         uFogInk: { value: new THREE.Color('#5d8f97') },
+        uFogRange: { value: new THREE.Vector2(800, 14000) }, // where they fade, m (the game's weather moves it with the haze)
       },
       depthTest: false,
       depthWrite: false,

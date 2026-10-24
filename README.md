@@ -174,6 +174,16 @@ rider after a trip to the diorama; `?rider=male|female|classic` in the URL picks
 one too. Its **Outfit & gear** and **Settings** panels are placeholders for now,
 and nothing plays on the music bus yet.
 
+**Weather & time**, on the same rail, sets the clock (a slider, or straight to
+sunrise, noon, sunset or night), lets the day go by on its own (a game minute
+a second, slower through sunrise and sunset, quicker through the night) and
+picks the weather: clear, cloudy, snowing, a blizzard, or changeable, which
+moves between them every few minutes. The sun keeps Hemu's real path on the
+1st of March, so it rises a little south of east at about 6:30, stands 33°
+up at noon and sets just before 17:30 (local solar time). The game
+remembers these too; `?time=17.2` (which holds the clock still) and
+`?weather=clear|cloudy|snow|blizzard|changeable` set them for one visit.
+
 On a phone or tablet the game plays by touch (`src/touch.js`). Put a thumb down
 anywhere low on the left and drag: a stick appears under it, and sideways
 carves (by how far you push), up tucks and down skids. Hold **Ollie**, bottom
@@ -322,6 +332,16 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
   away in patches and ragged where the grooming stops. Each vertex carries
   where it lies on its run (across and along it, from `PisteField.coordsAt`),
   so the ribs follow the run's bends.
+- `src/world/weather.js` is the time of day and the weather, painted rather
+  than simulated (a physically based sky such as takram's three-atmosphere
+  would want HDR and its own post chain, and fight the flat tones). How high
+  the sun stands picks the sky's colors, the haze, and the toon tones every
+  surface is drawn in: warm lit and lilac shade at sunrise and sunset, blue by
+  moonlight. Cloud greys and flattens them, and brings the haze in.
+  `src/world/sky.js` paints a flat sun with a halo, the horizon warming toward
+  it, cloud cover, and stars and the moon; `src/world/snowfall.js` keeps
+  falling flakes in a box of air that wraps round the camera, so you ride
+  through the snow.
 - `src/render/post.js` draws ink lines from depth (silhouettes) and normals
   (creases), with jittered offsets for a hand-drawn line, plus paper grain.
 - `src/player/rider.js` builds the snowboarder from primitives after a
