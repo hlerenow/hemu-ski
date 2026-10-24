@@ -7,6 +7,8 @@
 // Built from primitives so it matches the flat cel-shaded world.
 import * as THREE from 'three';
 import { makeToon } from '../render/toon.js';
+import { fallPose, applyFallPose, applyShakePose, placeAssembly, handOnSnow } from './fall.js';
+import { clearGround, rollAssembly } from './rider-contact.js';
 import { THROW, ON_BOARD, sample, throwWeight } from './throw.js';
 
 const P = {
@@ -460,6 +462,18 @@ export class Rider {
     const sitting = this.locomotion === 'sit';
     if (sitting) this.#sit(p);
     else this.#carve(p);
+    // Fold the articulated rig into a protective tuck while rolling.
+    const protect = s.protective || 0;
+    this.torso.rotation.x += protect * 0.2;
+    this.head.rotation.x += protect * 0.25;
+    for (const arm of [this.armL, this.armR]) {
+      arm.sh.rotation.z *= 1 - protect * 0.7;
+      arm.el.rotation.x += (-1.6 - arm.el.rotation.x) * protect;
+    }
+
+    this.fall = s.fall ? fallPose(s.fall.time, s.fall.motion) : null;
+    if (this.fall) applyFallPose(this, this.fall);
+    else if (s.shakeTime != null) applyShakePose(this, s.shakeTime);
 
     // Legs: two-bone IK from hip socket to ankle, knees driven forward (and
     // out round the seat when sitting).
@@ -496,14 +510,31 @@ export class Rider {
     if (this.throwT !== null && this.locomotion === 'ride') this.#throwOnBoard(this.throwT);
     else if (this.reachW > 0 && this.locomotion === 'ride') this.#reachOut();
 
-    // Crash tumble.
-    this.body.rotation.x = p.tumble;
+    // The board, bindings and rig turn together: in a fall about what's on
+    // the snow, rolling in the air about the hip region.
+    this.body.rotation.x = 0;
+    if (this.fall) placeAssembly(this.edge, this.fall);
+    else rollAssembly(this.edge, s.roll ?? p.tumble, 0.65);
 
     const afoot = this.locomotion === 'walk' || this.locomotion === 'act';
     const targetYaw = afoot || sitting ? Math.PI : Math.PI / 2;
     this.body.rotation.y += (targetYaw - this.body.rotation.y) * Math.min(1, dt / 0.08);
-    if (afoot || sitting) { this.edge.rotation.z = 0; this.body.rotation.x = 0; }
+    if (afoot || sitting) { this.edge.rotation.set(0, 0, 0); this.edge.position.set(0, 0, 0); }
     this.model?.update(dt, this, this.locomotion, s.speed || 0);
+  }
+
+  clearGround(hf, settle = false) {
+    const lift = clearGround(this.root, hf, settle);
+    const hands = this.fall?.hands;
+    if (hands && this.model && (hands[0][0] > 0 || hands[1][0] > 0)) {
+      // Hands planted on the snow, wherever the fall has put the body.
+      hands.forEach((hand, i) => {
+        if (hand[0] > 0) this.model.plantHand(handOnSnow(this.root, hand, hf), hand[0], i ? 'Right' : 'Left');
+      });
+      // Recheck clothing after the arm IK.
+      clearGround(this.root, hf);
+    }
+    return lift;
   }
 
   // On the board: edged over by `lean`, crouched, arms out for balance.

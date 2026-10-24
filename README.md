@@ -257,7 +257,7 @@ pickup and the snowmobile by the East Service Centre.
 | Key | Action |
 | --- | --- |
 | A / D (← / →) | carve heelside / toeside |
-| W (↑) | tuck; push along on the flat |
+| W (↑) | tuck; push along on the flat; hold in the air to chain front rolls; release to finish the current roll; brace for landing |
 | S (↓) | skid / brake |
 | Space | hold and release to ollie, steer in the air to spin |
 | E | board a lift within 10 m of its bottom station (Space skips the ride); get in or out of the pickup, the Jetson ONE or the rowing boat, or on or off the snowmobile, beside it; get in or out of the hot spring; pet the dog beside it; turn a prayer wheel beside it |
@@ -282,12 +282,15 @@ under `npm run dev` or Node:
 - `tools/terrain/fetch-data.mjs`: bakes the real terrain, runs and lifts into
   `public/data/` (`npm run fetch-data`; see below).
 - `tools/review/`: close-up review pages for the riders
-  (`/tools/review/rider.html`) and the dog (`/tools/review/dog.html`), and
+  (`/tools/review/rider.html`), their falls (`/tools/review/fall.html`: each
+  kind of crash replayed on the flat or a slope, from any side) and the dog
+  (`/tools/review/dog.html`), and
   one for the summit (`/tools/review/summit.html`): its landmarks seen from
   cameras fitted to the four photos they were placed from, with each photo
   laid over (from the Cowart canvas in `canvas/`, where it's there) and the
   arrows drawn on them marked, and from straight above.
-- `tests/`: `npm test` checks the female rider's animation.
+- `tests/`: `npm test` checks the female rider's animation, the falls and
+  front rolls (`tests/landing-recovery.mjs`).
 
 The 3D models in `public/models/` are made in a separate, local-only asset lab
 (Tripo and Blender); the README in each model's folder says where it came from.
@@ -332,6 +335,14 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
 - `src/player/physics.js` handles slope gravity, edge grip that turns sideways
   slip back into forward speed, drag, ollies, natural take-offs on rollovers,
   tree crashes, and walls (the map edge, lift stations and service centres).
+  Held in the air, W chains front rolls; let go and the roll under way
+  finishes. The legs soak up a straight landing (more when braced with W), so
+  only big drops and sideways landings wipe you out. A fall
+  (`src/player/fall.js`) goes the way you were going: over the toe edge onto
+  the knees, the heel edge onto the seat, a caught nose or tail, a tumble when
+  fast, or a slam from a hard landing. The body slides on down the slope, the
+  board swings round below it across the fall line, and you get up off the
+  knees or the seat, shake your head and dust off, until you ride away.
   Off the runs the snow is powder (less on the steep, rocky faces): it drags
   most at walking pace and less as the board planes up, and the edge holds a
   little less. The board rides sunk in it, to just over the ankles at speed and

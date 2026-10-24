@@ -8,6 +8,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { createServer } from 'vite';
+import { fallPose, fallKind, applyFallPose, placeAssembly, handOnSnow, shakePose, FALL_DURATION, SHAKE_DURATION, FALL_KINDS } from '../src/player/fall.js';
+import { clearGround, rollAssembly } from '../src/player/rider-contact.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const server = await createServer({ root, server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' });
@@ -96,6 +98,85 @@ try {
   assertPose(freshRide.root, 'run -> ride restores all bones including undriven bones');
   frames('walk', 0);
   assertAuthoredPose(0, 'walk/run -> ride -> frozen idle');
+
+  // Real skinned geometry (all clothing vertices), rolled with its bindings.
+  const contactRoot = group(), assembly = group(); contactRoot.add(assembly); assembly.add(model.root);
+  const terrain = { heightAt: (x, z) => 0.2 * x + 0.3 * z };
+  const vertex = new THREE.Vector3();
+  for (let frame = 0; frame <= 32; frame++) {
+    contactRoot.position.set(0, 0, 0);
+    rollAssembly(assembly, -frame / 32 * Math.PI * 4, 0.65);
+    model.update(1 / 60, rider, 'ride', 0);
+    clearGround(contactRoot, terrain, true);
+    let minimum = Infinity;
+    contactRoot.traverseVisible((o) => {
+      if (!o.isMesh) return;
+      for (let i = 0; i < o.geometry.attributes.position.count; i++) {
+        o.getVertexPosition(i, vertex).applyMatrix4(o.matrixWorld);
+        minimum = Math.min(minimum, vertex.y - terrain.heightAt(vertex.x, vertex.z));
+      }
+    });
+    assert(Math.abs(minimum - 0.025) < 1e-5, 'actual rig rests above snow throughout two rotations');
+  }
+  assembly.remove(model.root);
+  console.log('PASS actual skinned rider contact throughout two complete rolls on a slope');
+
+  // Every kind of fall on the real rig, on sloped snow: clothing above it,
+  // planted hands on it, and an edge fall's boots kept down.
+  const fallModel = new RiderModel(gltf, 'female');
+  const fallRoot = group(), fallEdge = group(), fallBody = group();
+  fallRoot.add(fallEdge); fallEdge.add(fallBody); fallBody.rotation.y = Math.PI / 2;
+  fallBody.add(fallModel.root);
+  const snow = { heightAt: (x, z) => 0.1 * x };
+  // applyFallPose poses the shared mock rider; put it back for the tests after.
+  const riderPose = [rider.hips, rider.torso, rider.head, rider.armL.sh, rider.armL.el, rider.armR.sh, rider.armR.el]
+    .map(o => [o, o.position.clone(), o.rotation.clone()]);
+  for (const kind of Object.keys(FALL_KINDS)) {
+    const motion = { kind, forward: kind === 'tail' ? -1 : 1, speed: 12 };
+    for (let i = 0; i <= 62; i++) {
+      const t = i / 20, pose = fallPose(t, motion);
+      fallRoot.position.set(0, 0, 0);
+      applyFallPose(rider, pose);
+      placeAssembly(fallEdge, pose);
+      fallModel.update(1 / 20, rider, 'ride', 0);
+      clearGround(fallRoot, snow, true);
+      if (pose.plant > 0) {
+        const targets = pose.hands.map(h => handOnSnow(fallRoot, h, snow));
+        pose.hands.forEach((h, k) => { if (h[0] > 0) fallModel.plantHand(targets[k], h[0], k ? 'Right' : 'Left'); });
+        clearGround(fallRoot, snow);
+        pose.hands.forEach((h, k) => {
+          if (h[0] < 1) return;
+          const wrist = fallModel.bones[k ? 'RightHand' : 'LeftHand'].bone.getWorldPosition(new THREE.Vector3());
+          assert(wrist.distanceTo(targets[k]) < 0.15, `${kind} ${t}s: planted wrist on its snow contact (${wrist.distanceTo(targets[k]).toFixed(3)} m)`);
+        });
+      }
+      // The board stays down: an edge fall never lifts the boots off the snow.
+      if (['toe', 'heel', 'slam'].includes(kind)) {
+        for (const foot of ['LeftFoot', 'RightFoot']) {
+          const f = fallModel.bones[foot].bone.getWorldPosition(new THREE.Vector3());
+          assert(f.y - snow.heightAt(f.x, f.z) < 0.4, `${kind} ${t}s: ${foot} ${(f.y - snow.heightAt(f.x, f.z)).toFixed(2)} m off the snow`);
+        }
+      }
+      fallRoot.traverseVisible(o => {
+        if (!o.isMesh) return;
+        for (let j = 0; j < o.geometry.attributes.position.count; j++) {
+          o.getVertexPosition(j, vertex).applyMatrix4(o.matrixWorld);
+          assert(vertex.y >= snow.heightAt(vertex.x, vertex.z) + 0.0249, 'posed fall clothing stays above sloped snow');
+        }
+      });
+    }
+  }
+  for (const [o, position, rotation] of riderPose) { o.position.copy(position); o.rotation.copy(rotation); }
+  assert.equal(fallPose(0).phase, 'impact');
+  assert.equal(fallPose(1.2).phase, 'settle');
+  assert.equal(fallPose(FALL_DURATION, { kind: 'heel' }).hip[0], 0.67);
+  assert.deepEqual([{ side: 1 }, { side: -1 }, { reason: 'hard landing' }, { forward: -1 }, { speed: 25 }, { speed: 10 }].map(fallKind),
+    ['toe', 'heel', 'slam', 'tail', 'roll', 'nose'], 'falls picked by direction');
+  assert(shakePose(0.3).head * shakePose(0.45).head < 0, 'head changes direction during shake');
+  assert(Math.abs(shakePose(1.1).head) < 1e-6, 'shake settles to neutral');
+  assert(shakePose(1.1).sleeve === 1 && shakePose(1.8).thighs === 1, 'brushes the sleeve, then dusts the thighs');
+  assert(shakePose(SHAKE_DURATION).thighs === 0, 'dusting finishes by the end');
+  console.log('PASS actual rig impact/slide/get-up contact and diminishing head shake');
 
   // The swimsuit's clips, as the hot spring plays them: 'act', at a set time.
   const swimGltf = await load('female-rider-swim-v01.glb');

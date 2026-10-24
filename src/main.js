@@ -14,6 +14,7 @@ import { THROW } from './player/throw.js';
 import { InkPost } from './render/post.js';
 import { toonUniforms } from './render/toon.js';
 import { Rider } from './player/rider.js';
+import { FALL_DURATION, SHAKE_DURATION } from './player/fall.js';
 import { BoardPhysics } from './player/physics.js';
 import { Trail, BoardTrail, Spray, SnowCollar } from './player/fx.js';
 import { Hud } from './hud.js';
@@ -691,15 +692,22 @@ function poseRider(dt, snap = false) {
   if (input.brake && phys.grounded) lean -= 0.35; // sit on the heel edge
   lean = THREE.MathUtils.clamp(lean, -1.0, 1.0);
   if (!phys.grounded) lean *= 0.3;
-  rider.pose.tumble = phys.crashed > 0 ? rider.pose.tumble + dt * 9 : 0;
+  const falling = phys.crashed > 0;
+  const fallTime = falling ? FALL_DURATION - phys.crashed : 0;
+  rider.pose.tumble = 0;
   rider.update(dt, {
-    crouch: walking ? 0 : petT > 0 ? 1 : input.tuck ? 0.9 : input.brake ? 0.6 : 0.35 + phys.jumpCharge * 0.5,
-    lean: walking ? 0 : lean,
-    twist: walking ? 0 : input.steer * 0.5,
+    crouch: falling || phys.landingRecovery > 0 ? 1 : walking ? 0 : petT > 0 ? 1 : input.tuck ? 0.9 : input.brake ? 0.6 : 0.35 + phys.jumpCharge * 0.5,
+    lean: walking || falling ? 0 : lean,
+    twist: walking || falling ? 0 : input.steer * 0.5,
+    roll: -phys.flip,
+    fall: falling ? { time: fallTime, motion: phys.crashMotion } : null,
+    shakeTime: phys.shakeOff > 0 ? SHAKE_DURATION - phys.shakeOff : null,
+    protective: falling ? 0 : (phys.flip > 0 && (input.tuck || phys.flip < phys.flipTarget) ? 1 : 0),
     air: !walking && !phys.grounded,
     locomotion: rider.locomotion,
     speed: sp,
   });
+  if (falling || phys.flip > 0 || phys.landingRecovery > 0) rider.clearGround(phys.hf, falling);
 }
 
 // ---------- Powder ----------
@@ -745,7 +753,17 @@ function frame() {
     for (const ev of phys.events.splice(0)) {
       if (ev.type === 'crash') { falls++; hud.toast(ev.reason === 'tree' ? 'Tree!' : 'Wipeout!'); trail.gap(phys.pos); }
       if (ev.type === 'respawn') respawnInPlace();
-      if (ev.type === 'air') hud.toast(ev.spin >= 180 ? `${ev.spin}°!` : `Air ${ev.time.toFixed(1)}s`);
+      if (ev.type === 'recovered') {
+        trail.gap(phys.pos);
+        _sv.copy(phys.pos).y += 1.05;
+        powderSpray.emit(_sv, _w.set(0, 0.4, 0), 12, 0.65);
+      }
+      if (ev.type === 'air') {
+        const tricks = [];
+        if (ev.frontRolls > 0) tricks.push(`Front Roll ×${ev.frontRolls} (${ev.frontRolls * 360}°)`);
+        if (ev.spin >= 180) tricks.push(`${ev.spin}°`);
+        hud.toast(tricks.length ? `${tricks.join(' + ')}!` : `Air ${ev.time.toFixed(1)}s`);
+      }
       if (ev.type === 'land' && phys.powder > 0.3) {
         _sv.copy(phys.vel).multiplyScalar(0.15);
         powderSpray.emit(phys.pos, _sv, Math.round(Math.min(40, 10 + ev.impact * 4) * phys.powder), 3);

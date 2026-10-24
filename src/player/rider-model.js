@@ -483,14 +483,34 @@ export class RiderModel {
     for (const { bone, axis, angle } of this.fingers) bone.quaternion.multiply(_q.setFromAxisAngle(axis, angle));
   }
 
+  // A world-space hand contact during a fall, layered over the pose.
+  plantHand(world, weight, side = 'Left') {
+    this.root.updateMatrixWorld(true);
+    const names = [side + 'Arm', side + 'ForeArm', side + 'Hand'];
+    const from = names.map(name => this.bones[name].bone.quaternion.clone());
+    this.#armTo(side, side === 'Left' ? 1 : -1, this.root.worldToLocal(world.clone()), null, true);
+    // Open palm parallel to the board, instead of fingers pointing into snow.
+    const hand = this.bones[side + 'Hand'];
+    const parentQ = hand.bone.parent.getWorldQuaternion(new THREE.Quaternion());
+    hand.bone.quaternion.copy(parentQ.invert().multiply(this.root.getWorldQuaternion(new THREE.Quaternion())).multiply(hand.modelQ));
+    names.forEach((name, i) => {
+      const bone = this.bones[name].bone;
+      bone.quaternion.slerpQuaternions(from[i], bone.quaternion.clone(), weight);
+    });
+    this.root.updateMatrixWorld(true);
+  }
+
   // Two-bone IK: the hand onto `grip` (model frame), the elbow bent out to the
   // side (`sign`: 1 left, -1 right), down and back, or the way `bend` says.
-  #armTo(side, sign, grip, bend = null) {
+  #armTo(side, sign, grip, bend = null, wristContact = false) {
     const sh = this.#modelPos(side + 'Arm', new THREE.Vector3());
     // The wrist, a palm's length back from the grip toward the shoulder and a
     // little above it.
-    const wrist = grip.clone().addScaledVector(sh.clone().sub(grip).normalize(), this.palm);
-    wrist.y += this.palm * 0.5;
+    const wrist = grip.clone();
+    if (!wristContact) {
+      wrist.addScaledVector(sh.clone().sub(grip).normalize(), this.palm);
+      wrist.y += this.palm * 0.5;
+    }
     const d = wrist.clone().sub(sh);
     const len = Math.min(d.length(), this.upperArm + this.foreArm - 1e-4);
     d.normalize();
