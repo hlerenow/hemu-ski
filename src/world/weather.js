@@ -4,7 +4,9 @@
 // the toon tones every lit surface is painted in (render/toon.js), warm at
 // sunrise and sunset and blue by moonlight. The weather lays cloud, flat light,
 // haze and falling snow (world/snowfall.js) over that, easing from one kind to
-// the next. Painted rather than simulated, so it keeps the game's look.
+// the next. An aurora can hang in the northern sky through the night, behind
+// whatever cloud there is. Painted rather than simulated, so it keeps the
+// game's look.
 import * as THREE from 'three';
 import { Snowfall } from './snowfall.js';
 
@@ -52,6 +54,7 @@ export const WEATHERS = {
 // What "changeable" weather may turn into next.
 const NEXT = { clear: ['clear', 'cloudy'], cloudy: ['clear', 'snow', 'cloudy'], snow: ['cloudy', 'blizzard', 'snow'], blizzard: ['snow'] };
 const WIND_DIR = new THREE.Vector2(0.92, 0.38).normalize(); // blowing toward the east-south-east
+const AURORA = new THREE.Color('#5fd99a'); // the green it casts on the snow
 
 // How fast the day goes by: a game minute a second, slower round sunrise and
 // sunset so they linger, and much quicker through the dark.
@@ -73,6 +76,8 @@ export class Weather {
     this.running = true;
     this.kind = 'clear'; // or 'changeable'
     this.title = false; // the title's island in the clouds: no haze, no snow
+    this.aurora = false; // whether there's an aurora tonight
+    this.auroraNow = 0; // how much of it's showing, easing in and out
     this.sunDir = new THREE.Vector3(); // where the sun really is
     this.moonDir = new THREE.Vector3();
     this.lightDir = new THREE.Vector3(); // where the light comes from: the sun, or by night the moon
@@ -99,6 +104,7 @@ export class Weather {
   settle() {
     const w = WEATHERS[this.current];
     Object.assign(this.now, w, { fog: [...w.fog] });
+    this.auroraNow = this.aurora ? 1 : 0;
   }
 
   // What part of the day it is, for the menu.
@@ -130,6 +136,7 @@ export class Weather {
     for (const key of ['cover', 'overcast', 'snow', 'wind']) now[key] += (want[key] - now[key]) * k;
     // The haze closes in and clears on a log scale, as you'd see it.
     for (let i = 0; i < 2; i++) now.fog[i] = Math.exp(Math.log(now.fog[i]) + (Math.log(want.fog[i]) - Math.log(now.fog[i])) * k);
+    this.auroraNow += ((this.aurora ? 1 : 0) - this.auroraNow) * k;
 
     // The time of day's colors.
     let i = 0;
@@ -147,6 +154,10 @@ export class Weather {
       const v = lum(c[key]);
       c[key].lerp(_grey.setRGB(v * 0.97, v, v * 1.04), grey);
     }
+    // The aurora, out once it's properly dark and hidden by cloud, as the stars
+    // are, puts a little of its green on the snow and the lakes.
+    const aurora = this.auroraNow * THREE.MathUtils.smoothstep(night, 0.4, 1) * (1 - now.cover);
+    for (const key of ['lit', 'shadow', 'horizon']) c[key].lerp(AURORA, aurora * (key === 'horizon' ? 0.08 : 0.14));
     // Snow lightens the air: the haze goes pale, as the falling snow is.
     this.haze.copy(c.horizon).lerp(_c.setRGB(1, 1, 1), 0.15 + now.snow * 0.25);
     if (now.snow > 0) c.zenith.lerp(this.haze, now.snow * 0.5);
@@ -176,6 +187,7 @@ export class Weather {
     u.uSun.value = THREE.MathUtils.smoothstep(this.sunDir.y, -0.04, 0.0) * (1 - now.cover);
     u.uMoonDir.value.copy(this.moonDir);
     u.uNight.value = night * (1 - now.cover);
+    u.uAurora.value = aurora;
     u.uCover.value = now.cover;
 
     // The haze, and the far ink lines fading into it.

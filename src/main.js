@@ -412,27 +412,30 @@ for (const b of riderButtons)
 
 // ---------- Weather ----------
 // The menu's Weather panel: the clock (a slider, and quick jumps to sunrise,
-// noon, sunset and night), whether the day goes by on its own, and the kind of
-// weather. Remembered between visits, like the rider; ?time= and ?weather=
-// choose too, for that visit only (a time from the address holds still).
+// noon, sunset and night), whether the day goes by on its own, the kind of
+// weather and whether there's an aurora by night. Remembered between visits,
+// like the rider; ?time=, ?weather= and ?aurora=1 choose too, for that visit
+// only (a time from the address holds still).
 const wxAddress = new URLSearchParams(location.search);
 const wxClock = document.getElementById('wx-clock'), wxPhase = document.getElementById('wx-phase');
 const wxHour = document.getElementById('wx-hour'), wxRun = document.getElementById('wx-run');
+const wxAurora = document.getElementById('wx-aurora');
 const wxKinds = [...document.querySelectorAll('#fly-weather [data-weather]')];
 const WX_HOURS = { sunrise: SUNRISE + 0.25, noon: 12, sunset: SUNSET - 0.35, night: 22.5 };
 const showWeather = () => {
   for (const b of wxKinds) b.setAttribute('aria-pressed', String(b.dataset.weather === weather.kind));
 };
-let wxFromAddress = wxAddress.has('time') || wxAddress.has('weather');
+let wxFromAddress = ['time', 'weather', 'aurora'].some((k) => wxAddress.has(k));
 function saveWeather() {
   if (wxFromAddress) return;
-  Object.assign(menu.prefs, { weather: weather.kind, hour: Math.round(weather.hour * 100) / 100, dayGoesBy: weather.running });
+  Object.assign(menu.prefs, { weather: weather.kind, hour: Math.round(weather.hour * 100) / 100, dayGoesBy: weather.running, aurora: weather.aurora });
   menu.save();
 }
 {
   const hourParam = parseFloat(wxAddress.get('time'));
   const kind = [wxAddress.get('weather'), menu.prefs.weather].find((k) => k === 'changeable' || k in WEATHERS);
   if (kind) weather.set(kind);
+  weather.aurora = wxAddress.has('aurora') ? !['0', 'false', 'no', 'off'].includes(wxAddress.get('aurora')) : menu.prefs.aurora === true;
   weather.settle();
   if (Number.isFinite(hourParam)) {
     weather.hour = THREE.MathUtils.euclideanModulo(hourParam, 24);
@@ -442,6 +445,7 @@ function saveWeather() {
     weather.running = menu.prefs.dayGoesBy !== false;
   }
   wxRun.checked = weather.running;
+  wxAurora.checked = weather.aurora;
   showWeather();
 }
 let wxDragging = false;
@@ -460,6 +464,11 @@ for (const b of document.querySelectorAll('#fly-weather [data-hour]'))
   });
 wxRun.addEventListener('change', () => {
   weather.running = wxRun.checked;
+  wxFromAddress = false;
+  saveWeather();
+});
+wxAurora.addEventListener('change', () => {
+  weather.aurora = wxAurora.checked;
   wxFromAddress = false;
   saveWeather();
 });

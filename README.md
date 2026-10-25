@@ -178,11 +178,15 @@ and nothing plays on the music bus yet.
 sunrise, noon, sunset or night), lets the day go by on its own (a game minute
 a second, slower through sunrise and sunset, quicker through the night) and
 picks the weather: clear, cloudy, snowing, a blizzard, or changeable, which
-moves between them every few minutes. The sun keeps Hemu's real path on the
+moves between them every few minutes. **Aurora by night** hangs green curtains,
+violet at their tops, across the northern sky once it's dark; cloud hides
+them, as it hides the stars. (At Hemu's latitude a real one is rare, low and
+mostly red; this is the far-north kind.) The sun keeps Hemu's real path on the
 1st of March, so it rises a little south of east at about 6:30, stands 33°
 up at noon and sets just before 17:30 (local solar time). The game
-remembers these too; `?time=17.2` (which holds the clock still) and
-`?weather=clear|cloudy|snow|blizzard|changeable` set them for one visit.
+remembers these too; `?time=17.2` (which holds the clock still),
+`?weather=clear|cloudy|snow|blizzard|changeable` and `?aurora=1` set them for
+one visit.
 
 On a phone or tablet the game plays by touch (`src/touch.js`). Put a thumb down
 anywhere low on the left and drag: a stick appears under it, and sideways
@@ -339,7 +343,9 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
   surface is drawn in: warm lit and lilac shade at sunrise and sunset, blue by
   moonlight. Cloud greys and flattens them, and brings the haze in.
   `src/world/sky.js` paints a flat sun with a halo, the horizon warming toward
-  it, cloud cover, and stars and the moon; `src/world/snowfall.js` keeps
+  it, cloud cover, stars and the moon, and the aurora: folded sheets hung
+  east to west in the north, each ray crossing one where it's found, with a
+  crisp hem at the foot and soft rays above; `src/world/snowfall.js` keeps
   falling flakes in a box of air that wraps round the camera, so you ride
   through the snow.
 - `src/render/post.js` draws ink lines from depth (silhouettes) and normals
