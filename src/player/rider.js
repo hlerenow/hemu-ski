@@ -10,6 +10,7 @@ import { makeToon } from '../render/toon.js';
 import { fallPose, applyFallPose, applyShakePose, placeAssembly, handOnSnow } from './fall.js';
 import { clearGround, rollAssembly } from './rider-contact.js';
 import { THROW, ON_BOARD, sample, throwWeight } from './throw.js';
+import { SKI, POLE, SkiPose, makeSki, makePole } from './rider-skis.js';
 
 const P = {
   cream: '#efe9dc',
@@ -80,7 +81,7 @@ function backpackTexture() {
 
 const UP = new THREE.Vector3(0, 1, 0);
 const DOWN = new THREE.Vector3(0, -1, 0);
-const _t = new THREE.Vector3();
+const _t = new THREE.Vector3(), _d = new THREE.Vector3();
 // The primitive character's build, for sitting on a seat: how high its hips sit
 // above the cushion, where its torso pivots above the hips, its shoulders
 // (out, up) from that pivot, and how far its arms reach (shoulder to mitt).
@@ -169,6 +170,15 @@ export class Rider {
     this.boots = []; // primitive boots and straps, hidden when the model boots stand in them
     this.#buildCharacter();
     this.stance = this.feet.map((f) => f.position.clone()); // the feet on the board
+    // Skis (see rider-skis.js): one under each boot, turning with the foot,
+    // and a pole in each hand. `gear` says which you ride: 'board' or 'ski'.
+    this.gear = 'board';
+    this.skiPose = new SkiPose();
+    this.skis = this.feet.map((f) => { const ski = makeSki(); ski.position.z = 0.02; f.add(ski); return ski; });
+    this.poles = [makePole(), makePole()];
+    this.body.add(...this.poles);
+    for (const g of [...this.skis, ...this.poles]) g.visible = false;
+    this.kneeShift = 0; // both knees pushed toward +x (into a turn on skis)
     this.seat = null; // on a vehicle: see setLocomotion
     // A world point the right hand reaches out to (petting the dog), or null,
     // and how far into reaching it is (0–1), easing in and out. On foot,
@@ -294,8 +304,9 @@ export class Rider {
     if (mode === 'sit' && !seat) return false;
     if (mode === 'act' && !(this.model && this.act)) return false;
     this.seat = seat;
-    if (mode !== 'sit') this.feet.forEach((f, i) => f.position.copy(this.stance[i]));
+    if (mode !== 'sit') this.#standOnBoard();
     this.locomotion = mode;
+    this.skiPose.snap = true;
     this.#gearVisibility();
     return true;
   }
@@ -308,11 +319,29 @@ export class Rider {
     return this.locomotion === 'act' || this.setLocomotion('act');
   }
 
+  // 'board' or 'ski': what you ride down on.
+  setGear(gear) {
+    this.gear = gear === 'ski' ? 'ski' : 'board';
+    this.skiPose.snap = true;
+    if (this.locomotion !== 'sit') this.#standOnBoard();
+    this.#gearVisibility();
+  }
+
+  get skiing() {
+    return this.gear === 'ski' && this.locomotion === 'ride';
+  }
+
+  // The feet back on the board's stance, square on it.
+  #standOnBoard() {
+    this.feet.forEach((f, i) => { f.position.copy(this.stance[i]); f.rotation.set(0, 0, 0); });
+  }
+
   #gearVisibility() {
-    const riding = this.locomotion === 'ride';
-    this.proceduralBoard.visible = riding && this.modelId !== 'female';
-    if (this.boardAssembly) this.boardAssembly.visible = riding && this.modelId === 'female';
-    for (const binding of this.bindings) binding.visible = riding && this.modelId !== 'female';
+    const riding = this.locomotion === 'ride', board = riding && this.gear !== 'ski';
+    this.proceduralBoard.visible = board && this.modelId !== 'female';
+    if (this.boardAssembly) this.boardAssembly.visible = board && this.modelId === 'female';
+    for (const binding of this.bindings) binding.visible = board && this.modelId !== 'female';
+    for (const g of [...this.skis, ...this.poles]) g.visible = riding && this.gear === 'ski';
     for (const boot of this.boots) boot.visible = !this.model && this.locomotion !== 'walk';
   }
 
@@ -459,8 +488,9 @@ export class Rider {
     p.twist += (s.twist - p.twist) * k;
     p.air += ((s.air ? 1 : 0) - p.air) * (1 - Math.exp(-dt * 6));
 
-    const sitting = this.locomotion === 'sit';
+    const sitting = this.locomotion === 'sit', skiing = this.skiing;
     if (sitting) this.#sit(p);
+    else if (skiing) this.#ski(dt, s);
     else this.#carve(p);
     // Fold the articulated rig into a protective tuck while rolling.
     const protect = s.protective || 0;
@@ -478,7 +508,8 @@ export class Rider {
     // Legs: two-bone IK from hip socket to ankle, knees driven forward (and
     // out round the seat when sitting).
     const fwd = new THREE.Vector3(0, 0, 1);
-    this.kneeOut = sitting ? this.seat.kneeOut ?? 0.45 : 0.12;
+    this.kneeOut = sitting ? this.seat.kneeOut ?? 0.45 : skiing ? this.skiPose.x.kneeOut : 0.12;
+    this.kneeShift = skiing ? this.skiPose.x.kneeShift : 0;
     for (let i = 0; i < 2; i++) {
       const side = i === 0 ? 1 : -1;
       const hip = new THREE.Vector3(0.12 * side, 0, 0).applyEuler(this.hips.rotation).add(this.hips.position);
@@ -488,7 +519,7 @@ export class Rider {
       const len = Math.min(d.length(), 2 * L - 0.001);
       const mid = ankle.clone().addScaledVector(d.normalize(), len / 2);
       const bendDir = fwd.clone().addScaledVector(d, -fwd.dot(d)).normalize();
-      bendDir.x += side * this.kneeOut;
+      bendDir.x += side * this.kneeOut + this.kneeShift;
       bendDir.normalize();
       const knee = mid.addScaledVector(bendDir, Math.sqrt(L * L - (len / 2) ** 2));
       this.thighs[i].set(knee, hip);
@@ -517,10 +548,13 @@ export class Rider {
     else rollAssembly(this.edge, s.roll ?? p.tumble, 0.65);
 
     const afoot = this.locomotion === 'walk' || this.locomotion === 'act';
-    const targetYaw = afoot || sitting ? Math.PI : Math.PI / 2;
+    // On skis you face down the hill, except in a fall, which goes as on the
+    // board: skis across the slope, you over them.
+    const targetYaw = afoot || sitting || (skiing && !this.fall) ? Math.PI : Math.PI / 2;
     this.body.rotation.y += (targetYaw - this.body.rotation.y) * Math.min(1, dt / 0.08);
     if (afoot || sitting) { this.edge.rotation.set(0, 0, 0); this.edge.position.set(0, 0, 0); }
     this.model?.update(dt, this, this.locomotion, s.speed || 0);
+    if (skiing) this.#poles();
   }
 
   clearGround(hf, settle = false) {
@@ -539,6 +573,7 @@ export class Rider {
 
   // On the board: edged over by `lean`, crouched, arms out for balance.
   #carve(p) {
+    this.#standOnBoard();
     this.edge.rotation.z = p.lean; // roll about the travel axis
     const c = Math.min(1, p.crouch + p.air * 0.35);
 
@@ -557,6 +592,58 @@ export class Rider {
     L.el.rotation.set(-0.35, 0, 0.1);
     R.sh.rotation.set(-0.9 + p.lean * 0.5 - air * 0.4, 0, -0.75 + air * 0.2 - sway);
     R.el.rotation.set(-1.0 - air * 0.4, 0, -0.2);
+  }
+
+  // On skis: the sprung pose from rider-skis.js. The whole skier leans into
+  // the turn by `roll`; each foot is raised or lowered by as much as keeps
+  // both skis on the snow under the lean. The hands reach for their spots.
+  #ski(dt, s) {
+    const x = this.skiPose.update(dt, {
+      lean: s.lean || 0, speed: s.speed || 0, air: !!s.air, brake: !!s.brake, tuck: !!s.tuck,
+      charge: s.charge || 0, slip: s.slip || 0, landing: s.landing || 0,
+    }, this.t);
+    this.edge.rotation.z = x.roll;
+    this.hips.position.set(x.px, x.py, x.pz);
+    this.hips.rotation.set(x.pPitch, x.pYaw, x.pRoll);
+    this.torso.rotation.set(x.tPitch, x.tYaw, x.tRoll);
+    this.head.rotation.set(x.hPitch, x.hYaw, x.hRoll);
+    const tan = Math.tan(x.roll);
+    for (const [f, k] of [[this.feet[0], 'l'], [this.feet[1], 'r']]) {
+      const fx = x[k + 'x'];
+      f.position.set(fx, SKI.sole + x[k + 'y'] + fx * tan, x[k + 'z']);
+      f.rotation.set(x[k + 'Pitch'], x[k + 'Yaw'], x[k + 'Roll'], 'YXZ');
+    }
+    const h = this.hips.position;
+    this.#grip(this.armL, _t.set(x.hlx, x.hly, x.hlz).add(h), 1);
+    this.#grip(this.armR, _t.set(x.hrx, x.hry, x.hrz).add(h), -1);
+  }
+
+  // Each pole from the hand toward its tip's spot, its tip kept out of the snow.
+  #poles() {
+    const x = this.skiPose.x, tan = this.fall ? 0 : Math.tan(x.roll);
+    this.body.updateMatrixWorld(true);
+    for (const [i, side, k] of [[0, 'Left', 'pl'], [1, 'Right', 'pr']]) {
+      const pole = this.poles[i];
+      const hand = this.body.worldToLocal(this.#palm(side, _t));
+      const dir = _d.set(x[k + 'x'], x[k + 'y'], x[k + 'z']).sub(hand).normalize();
+      // The snow under the leaning skier is at y = x·tan(roll) in this frame.
+      const L = POLE.length, floor = (hand.x + dir.x * L) * tan;
+      if (hand.y + dir.y * L < floor) {
+        const flat = Math.hypot(dir.x, dir.z) || 1, dy = Math.max(-1, (floor - hand.y) / L);
+        const k2 = Math.sqrt(1 - dy * dy) / flat;
+        dir.set(dir.x * k2, dy, dir.z * k2);
+      }
+      pole.position.copy(hand);
+      pole.quaternion.setFromUnitVectors(DOWN, dir);
+    }
+  }
+
+  // Where the middle of a palm is (world), on the rig if there is one.
+  #palm(side, out) {
+    if (this.model) return this.model.palmAt(side, out);
+    const el = (side === 'Left' ? this.armL : this.armR).el;
+    el.updateWorldMatrix(true, false);
+    return el.localToWorld(out.set(0, -0.25, 0.01));
   }
 
   // On a seat: hips on the cushion, feet on its footrests. The torso leans

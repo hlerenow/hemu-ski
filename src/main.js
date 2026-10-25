@@ -512,6 +512,24 @@ function updateWeatherPanel() {
 const riderParam = new URLSearchParams(location.search).get('rider');
 void chooseRider([riderParam, menu.prefs.rider].find((id) => RIDERS.includes(id)) ?? 'male');
 
+// ---------- Gear ----------
+// The menu's Outfit & gear panel: a snowboard or skis (stand-ins for now, see
+// player/rider-skis.js). Remembered like the rider; ?gear=ski picks too.
+const GEARS = ['board', 'ski'];
+const gearButtons = [...document.querySelectorAll('#fly-outfit [data-gear]')];
+function chooseGear(gear) {
+  rider.setGear(gear);
+  phys.gear = rider.gear;
+  trail.gap(phys.pos);
+  for (const b of gearButtons) b.setAttribute('aria-pressed', String(b.dataset.gear === rider.gear));
+  if (menu.prefs.gear !== rider.gear) {
+    menu.prefs.gear = rider.gear;
+    menu.save();
+  }
+}
+for (const b of gearButtons) b.addEventListener('click', () => chooseGear(b.dataset.gear));
+chooseGear([new URLSearchParams(location.search).get('gear'), menu.prefs.gear].find((g) => GEARS.includes(g)) ?? 'board');
+
 // ---------- Panels ----------
 const panel = document.getElementById('panel');
 const panelNextBtn = document.getElementById('panel-next');
@@ -822,7 +840,7 @@ function poseRider(dt, snap = false) {
 
   const sp = phys.speed;
   let lean = Math.atan2(sp * phys.yawRate, G);
-  if (input.brake && phys.grounded) lean -= 0.35; // sit on the heel edge
+  if (input.brake && phys.grounded && rider.gear !== 'ski') lean -= 0.35; // sit on the heel edge (skis snowplough)
   lean = THREE.MathUtils.clamp(lean, -1.0, 1.0);
   if (!phys.grounded) lean *= 0.3;
   const falling = phys.crashed > 0;
@@ -839,6 +857,12 @@ function poseRider(dt, snap = false) {
     air: !walking && !phys.grounded,
     locomotion: rider.locomotion,
     speed: sp,
+    // For the skier's pose (rider-skis.js).
+    brake: state === 'ride' && input.brake && phys.grounded,
+    tuck: state === 'ride' && input.tuck,
+    charge: phys.jumpCharge,
+    slip: phys.slip,
+    landing: phys.landingRecovery,
   });
   if (falling || phys.flip > 0 || phys.landingRecovery > 0) rider.clearGround(phys.hf, falling);
 }
@@ -913,7 +937,8 @@ function frame() {
     const onBoard = rider.locomotion !== 'walk' && phys.grounded && phys.crashed <= 0;
     updateSink(dt, onBoard);
     if (onBoard) {
-      trail.add(phys.pos, _side, 0.28, phys.powder > 0.5 ? 0.36 + sink : 0);
+      if (rider.gear === 'ski') trail.add(phys.pos, _side, 0.09, phys.powder > 0.5 ? 0.42 + sink : 0, 0.25);
+      else trail.add(phys.pos, _side, 0.28, phys.powder > 0.5 ? 0.36 + sink : 0);
       const kick = phys.slip * 0.6 + (input.brake ? 3 : 0) + Math.abs(phys.yawRate) * phys.speed * 0.08;
       const n = Math.min(6, Math.floor(kick * dt * 22 + Math.random()));
       if (n > 0 && phys.speed > 2) {

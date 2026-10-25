@@ -48,21 +48,33 @@ export class Trail {
 
 // The board's track: a thin carved line on the groomed snow and a wider, bluer
 // furrow where it ploughs through powder, each with gaps where the other runs.
+// Skis carve two lines side by side.
 export class BoardTrail {
   constructor() {
     this.line = new Trail();
+    this.line2 = new Trail();
     this.furrow = new Trail(600, '#d5e2e7');
-    this.mesh = new THREE.Group().add(this.line.mesh, this.furrow.mesh);
+    this.mesh = new THREE.Group().add(this.line.mesh, this.line2.mesh, this.furrow.mesh);
   }
-  // `furrow`: the width of the furrow when in powder, else 0 for the carved line.
-  add(p, side, width, furrow = 0) {
-    const [on, off] = furrow > 0 ? [this.furrow, this.line] : [this.line, this.furrow];
-    off.gap(p);
-    on.add(p, side, furrow > 0 ? furrow : width);
+  // `furrow`: the width of the furrow when in powder, else 0 for the carved
+  // line; `apart`: on skis, how far apart the two lines run, else 0.
+  add(p, side, width, furrow = 0, apart = 0) {
+    if (furrow > 0) {
+      this.line.gap(p); this.line2.gap(p);
+      this.furrow.add(p, side, furrow);
+    } else if (apart > 0) {
+      this.furrow.gap(p);
+      this.line.add(_o.copy(p).addScaledVector(side, apart / 2), side, width);
+      this.line2.add(_o.copy(p).addScaledVector(side, -apart / 2), side, width);
+    } else {
+      this.furrow.gap(p); this.line2.gap(p);
+      this.line.add(p, side, width);
+    }
   }
-  gap(p) { this.line.gap(p); this.furrow.gap(p); }
-  clear() { this.line.clear(); this.furrow.clear(); }
+  gap(p) { this.line.gap(p); this.line2.gap(p); this.furrow.gap(p); }
+  clear() { this.line.clear(); this.line2.clear(); this.furrow.clear(); }
 }
+const _o = new THREE.Vector3();
 
 // Snow heaped round the board where it rides sunk in powder: lumps in an oval
 // round it, half buried, as tall as `amount` (0–1) says. Place it on the snow

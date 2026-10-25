@@ -43,6 +43,7 @@ export class BoardPhysics {
     this.flip = 0;
     this.flipTarget = 0;
     this.landingRecovery = 0;
+    this.gear = 'board'; // or 'ski': skis turn and hold a little better (as bonvo.ski's do)
     this.events = [];
   }
 
@@ -139,7 +140,7 @@ export class BoardPhysics {
 
     const speed = this.vel.length();
     // Turn rate limited so lean (v·ω/g) stays under ~55°.
-    const maxRate = Math.min(2.2, 14 / Math.max(speed, 1));
+    const maxRate = Math.min(2.2, 14 / Math.max(speed, 1)) * (this.gear === 'ski' ? 1.1 : 1);
     let target = input.steer * maxRate;
     if (!this.grounded) target = input.steer * 4.5; // spins
     this.yawRate += (target - this.yawRate) * (1 - Math.exp(-dt * 7));
@@ -220,7 +221,7 @@ export class BoardPhysics {
     // In powder the edge holds less, so the board drifts and sprays.
     let vf = this.vel.dot(_f);
     let vs = this.vel.dot(_s);
-    const grip = (input.brake ? 2.2 : 7.5) * (1 - 0.15 * this.powder);
+    const grip = (input.brake ? 2.2 : 7.5) * (1 - 0.15 * this.powder) * (this.gear === 'ski' ? 1.05 : 1);
     const newVs = vs * Math.exp(-grip * dt);
     const removed = Math.abs(vs) - Math.abs(newVs);
     vf += Math.sign(vf || 1) * removed * (input.brake ? 0.1 : 0.8);

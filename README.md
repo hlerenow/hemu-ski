@@ -171,8 +171,18 @@ male, female or the classic one; the female rider can also walk and run off the
 board with F) and switches music and sound effects on and off. The game
 remembers your rider and those settings between visits, so you keep the same
 rider after a trip to the diorama; `?rider=male|female|classic` in the URL picks
-one too. Its **Outfit & gear** panel is a placeholder for now, and nothing plays
-on the music bus yet.
+one too. Its **Outfit & gear** panel picks a **Snowboard** or **Skis**
+(remembered too, and `?gear=ski` in the URL); its clothing slots are
+placeholders for now, and nothing plays on the music bus yet.
+
+On skis you face down the hill, skis parallel and a pole in each hand, after
+the skier on [bonvo.ski](https://bonvo.ski/): into a turn the hips and knees
+move to the inside while the upper body stays upright and faces down the hill,
+the inside ski leads, and a pole is planted at the start of each turn. S is a
+snowplough (tips in, knees in, arms out), W tucks you low with the poles under
+your arms, and the skis leave two lines in the snow. They turn and grip a
+little better than the board. The skis and poles are stand-ins built in code
+(`src/player/rider-skis.js`) until the Tripo models are made.
 
 **Settings** has **Mouse look**, for a mouse and keyboard. With it on, a click
 on the view takes the pointer, as in a third-person shooter, and the mouse

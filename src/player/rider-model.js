@@ -153,6 +153,7 @@ export class RiderModel {
     // Wrist to the middle of the palm, where the grip goes.
     this.palm = byName.LeftHandMiddle1 ? pos('LeftHand').distanceTo(at(byName.LeftHandMiddle1)) * 0.6 : 0;
     this.palmBone = byName.RightHandMiddle1 ?? null; // toward it from the wrist: the middle of the palm
+    this.palmBones = { Left: byName.LeftHandMiddle1 ?? null, Right: this.palmBone };
     // The rider's build, for Rider's seated pose (body units): as its CLASSIC_BUILD.
     const S = this.scale;
     this.build = {
@@ -369,7 +370,7 @@ export class RiderModel {
       const along = (this.thigh ** 2 - this.shin ** 2 + len ** 2) / (2 * len);
       const up = Math.sqrt(Math.max(0, this.thigh ** 2 - along ** 2));
       const bend = FWD.clone().addScaledVector(d, -FWD.dot(d));
-      bend.x += sign * (rider.kneeOut ?? 0.12); // knees track slightly outward
+      bend.x += sign * (rider.kneeOut ?? 0.12) + (rider.kneeShift ?? 0); // knees track slightly outward
       bend.normalize();
       const knee = hip.clone().addScaledVector(d, along).addScaledVector(bend, up);
 
@@ -377,13 +378,23 @@ export class RiderModel {
       const kneeNow = this.#modelPos(side + 'Leg', new THREE.Vector3());
       this.#aim(side + 'Leg', kneeNow, this.#modelPos(side + 'Foot', new THREE.Vector3()), ankle.clone().sub(kneeNow).normalize());
 
-      // Boot flat on the binding, whatever the leg is doing.
+      // Boot flat on the binding, whatever the leg is doing (turned with the
+      // foot, on skis).
       const f = this.bones[side + 'Foot'];
       const rootQ = this.root.getWorldQuaternion(new THREE.Quaternion());
       const parentQ = f.bone.parent.getWorldQuaternion(new THREE.Quaternion());
-      f.bone.quaternion.copy(parentQ.invert().multiply(rootQ).multiply(f.modelQ));
+      f.bone.quaternion.copy(parentQ.invert().multiply(rootQ).multiply(rider.feet[i].quaternion).multiply(f.modelQ));
       f.bone.updateMatrixWorld(true);
     }
+    // On skis the hands close round the poles' grips.
+    if (rider.skiing) for (const { bone, axis, angle } of this.fingers) bone.quaternion.multiply(_q.setFromAxisAngle(axis, angle * 0.9));
+  }
+
+  // Where the middle of a palm is (world), `side` 'Left' or 'Right'.
+  palmAt(side, out) {
+    this.bones[side + 'Hand'].bone.getWorldPosition(out);
+    const palm = this.palmBones[side];
+    return palm ? out.lerp(palm.getWorldPosition(_a), 0.6) : out;
   }
 
   // Where the middle of the right palm is (world): what it's holding.
