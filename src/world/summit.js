@@ -137,15 +137,90 @@ function gableRoof(g, len, span, y, rise, over, roofMat, endMat) {
   add(g, ends, endMat);
 }
 
-// 1: a white felt yurt, a round wall under a shallow cone, its door at the front.
+// 1: a white felt yurt, a round wall under a shallow cone, its door at the
+// front, standing open: tall enough to walk in by, a little taller than a real
+// one's. Inside, a rug over the floor and, at the back facing the door, the
+// felt mat Eric sits on (see npc/cast.js), a low table at his right. The wall
+// is a ring of boxes with a gap at the door wider than the doorway, since the
+// game keeps a rider half a metre off a box.
+const YURT = {
+  R: 3.2, wall: 2.1, door: [0.62, 1.95], // the doorway's half width and height
+  gap: 0.85, // half the gap in the ring of walls at the door
+  seat: [0, -1.75], // the mat's middle, its sitter facing the door (+z)
+};
+const feltIn = makeToon({ color: '#f2eee4', side: THREE.DoubleSide }, { rim: 0 });
+const roofIn = makeToon({ color: '#e6dfd0', side: THREE.DoubleSide }, { rim: 0 });
 function yurt() {
-  const g = new THREE.Group(), R = 3.2, wall = 1.7;
-  add(g, new THREE.CylinderGeometry(R, R, wall, 28), M.felt, 0, wall / 2, 0);
-  add(g, new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.28, 28, 1, true), M.band, 0, wall - 0.3, 0);
-  add(g, new THREE.ConeGeometry(R + 0.2, 1.5, 28), M.feltRoof, 0, wall + 0.75, 0);
+  const g = new THREE.Group(), { R, wall, door: [dw, dh], gap } = YURT;
+  // The felt goes round from one side of the doorway to the other (round from
+  // +z, which is where three.js starts a cylinder's sweep).
+  const open = Math.asin(dw / R), sweep = Math.PI * 2 - 2 * open;
+  add(g, new THREE.CylinderGeometry(R, R, wall, 32, 1, true, open, sweep), feltIn, 0, wall / 2, 0);
+  add(g, new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.28, 32, 1, true, open, sweep), M.band, 0, wall - 0.3, 0);
+  add(g, new THREE.ConeGeometry(R + 0.2, 1.5, 32, 1, true), roofIn, 0, wall + 0.75, 0);
   add(g, new THREE.CylinderGeometry(0.5, 0.55, 0.3, 12), M.crown, 0, wall + 1.45, 0);
-  add(g, box(0.95, 1.45, 0.3), M.door, 0, 0.72, R - 0.05);
-  return done(g, octagon(R, wall + 1.6), wall + 1.6);
+  // The doorway: a frame, the felt over its lintel, and the door swung out.
+  const z = Math.sqrt(R * R - dw * dw);
+  for (const s of [-1, 1]) add(g, box(0.12, dh, 0.16), M.door, s * dw, dh / 2, z);
+  add(g, box(2 * dw + 0.12, 0.12, 0.16), M.door, 0, dh + 0.06, z);
+  add(g, box(2 * dw, wall - dh - 0.12, 0.06), M.felt, 0, (wall + dh + 0.12) / 2, z);
+  const leaf = new THREE.Group();
+  leaf.position.set(-dw, 0, z + 0.05);
+  leaf.rotation.y = -2.3;
+  add(leaf, box(2 * dw - 0.08, dh - 0.06, 0.06), M.door, dw - 0.04, (dh - 0.06) / 2, 0);
+  g.add(leaf);
+  const lc = Math.cos(leaf.rotation.y), ls = Math.sin(leaf.rotation.y);
+  // The rug, a red ring round an ochre middle, and the mat and table.
+  add(g, new THREE.CylinderGeometry(R - 0.3, R - 0.3, 0.025, 32), M.band, 0, 0.0125, 0);
+  add(g, new THREE.CylinderGeometry(R - 0.75, R - 0.75, 0.03, 32), rugMiddle, 0, 0.015, 0);
+  const [sx, sz] = YURT.seat;
+  add(g, new THREE.CylinderGeometry(0.55, 0.56, 0.04, 20), cushion, sx, 0.05, sz + 0.08);
+  add(g, box(0.5, 0.3, 0.4), M.crown, sx - 0.85, 0.15, sz + 0.15);
+  add(g, new THREE.CylinderGeometry(0.06, 0.08, 0.13, 10), M.gold, sx - 0.85, 0.365, sz + 0.15);
+  // The wall's ring of boxes, each across the wall where it stands (its x along
+  // the wall), from one side of the gap round to the other.
+  const n = 14, from = Math.asin(gap / R), step = (Math.PI * 2 - 2 * from) / n;
+  const solids = [];
+  for (let k = 0; k < n; k++) {
+    const a = from + (k + 0.5) * step;
+    solids.push({ x: Math.sin(a) * (R - 0.05), z: Math.cos(a) * (R - 0.05), yaw: a, hw: R * Math.tan(step / 2) + 0.05, hd: 0.15, top: wall + 1.6 });
+  }
+  // The door, the table, and the sitter on his mat, knees and all.
+  solids.push({ x: -dw + dw * lc, z: z + 0.05 - dw * ls, yaw: leaf.rotation.y, hw: dw, hd: 0.05, top: dh });
+  solids.push({ x: sx - 0.85, z: sz + 0.15, hw: 0.25, hd: 0.2, top: 0.3 }, { x: sx, z: sz + 0.1, hw: 0.5, hd: 0.45, top: 1.1 });
+  return done(g, solids, wall + 1.6);
+}
+const rugMiddle = toon('#d8a73e'), cushion = toon('#2f5a8a');
+// The inside of the yurt standing in `root`, in world terms, as cabinSpace()
+// gives the cabin's: `room(x, z)` 0 outside, 1 inside and easing up over
+// `lead` m in front of the door; `inside`, `keepIn`; and `seat`, where the
+// mat is, on the floor (`y`), its sitter facing the door (`yaw`), and how high
+// its top is (`cushion`).
+export function yurtSpace(root, lead = 4) {
+  const { R, door: [dw], seat } = YURT, c = Math.cos(root.rotation.y), s = Math.sin(root.rotation.y);
+  const local = (wx, wz) => {
+    const dx = wx - root.position.x, dz = wz - root.position.z;
+    return [dx * c - dz * s, dx * s + dz * c];
+  };
+  const inside = (wx, wz) => Math.hypot(wx - root.position.x, wz - root.position.z) < R - 0.1;
+  const room = (wx, wz) => {
+    if (inside(wx, wz)) return 1;
+    const [x, z] = local(wx, wz), front = Math.sqrt(R * R - dw * dw);
+    if (Math.abs(x) < dw + 1 && z >= front) return 1 - smooth(0, lead, z - front);
+    return 0;
+  };
+  // Pulls a point back inside, `gap` m off the wall.
+  const keepIn = (p, gap) => {
+    const dx = p.x - root.position.x, dz = p.z - root.position.z, r = Math.hypot(dx, dz), max = R - gap;
+    if (r <= max) return;
+    p.x = root.position.x + (dx / r) * max;
+    p.z = root.position.z + (dz / r) * max;
+  };
+  const [x, z] = seat;
+  return {
+    room, inside, keepIn,
+    seat: { x: root.position.x + x * c + z * s, y: root.position.y, z: root.position.z - x * s + z * c, yaw: root.rotation.y, cushion: 0.07 },
+  };
 }
 
 // 2: the timber signpost: a post with a forked top on four splayed legs, its

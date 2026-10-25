@@ -6,11 +6,14 @@ import { gondolaCabin } from './world/props.js';
 import { createSky, SKY } from './world/sky.js';
 import { Weather, WEATHERS, SUNRISE, SUNSET } from './world/weather.js';
 import { PUFF_COVER } from './world/onsen.js';
-import { cabinSpace } from './world/summit.js';
+import { cabinSpace, yurtSpace } from './world/summit.js';
 import { SUMMIT } from './world/summit-layout.js';
 import { shoreAt, Ripples } from './world/lakes.js';
 import { PrayerWheels } from './world/prayer-wheels.js';
 import { Dog, DOG } from './dog/dog.js';
+import { Npc } from './npc/npc.js';
+import { CAST } from './npc/cast.js';
+import { Dialogue } from './npc/dialogue.js';
 import { THROW } from './player/throw.js';
 import { InkPost } from './render/post.js';
 import { toonUniforms } from './render/toon.js';
@@ -97,6 +100,12 @@ scene.add(backdrop);
 const ripples = new Ripples();
 scene.add(ripples.group);
 const cabinRoom = cabinSpace(summit.byId.get('summit:object-7')); // the coffee cabin's room, for the dog's home and the camera
+const yurtRoom = yurtSpace(summit.byId.get('summit:object-1')); // the yurt's, for the camera and Eric's seat
+// The rooms you can walk into, by the landmark they're in: the camera comes in
+// close inside them, and the cast sit in them (see NPCs).
+const rooms = new Map([['summit:object-7', cabinRoom], ['summit:object-1', yurtRoom]]);
+const roomAt = (x, z) => Math.max(...[...rooms.values()].map((r) => r.room(x, z)));
+const roomAround = (x, z) => [...rooms.values()].find((r) => r.inside(x, z)) ?? null;
 const sky = createSky();
 scene.add(sky);
 // The time of day and the weather (world/weather.js): they light everything
@@ -262,7 +271,8 @@ function act(code, repeat = false) {
   if (code === 'KeyF' && !repeat && state === 'ride') toggleLocomotion();
   if (code === 'KeyM' && !repeat) openMap();
   if (code === 'KeyQ' && !repeat && state === 'ride') throwSnowball();
-  if (code === 'KeyE' && !repeat && state === 'drive') {
+  if (code === 'KeyE' && !repeat && dialogue.open) dialogue.next();
+  else if (code === 'KeyE' && !repeat && state === 'drive') {
     if (car.phys.canExit === false) hud.toast(car.floats ? 'Row to the shore to step out' : touch.on ? 'Land first · hold Down' : 'Land first · hold Shift', 1600);
     else if (!getOut()) hud.toast(car.floats ? 'Row to the shore to step out' : 'Not over the water', 1600);
   }
@@ -559,7 +569,7 @@ const camLook = new THREE.Vector3();
 // so as this grows the cameras pull back, rise, look further ahead and widen
 // their lens, keeping you low in the frame with the run ahead above you.
 const portrait = () => THREE.MathUtils.clamp((1 - camera.aspect) / 0.54, 0, 1);
-// Indoors (the coffee cabin) it comes in close behind them, low and wide, like
+// Indoors (the coffee cabin, the yurt) it comes in close behind them, low and wide, like
 // a following shot, staying inside the room's walls: `indoors` eases 0 to 1 as
 // they go in through the door, and back out.
 let indoors = 0;
@@ -569,7 +579,8 @@ function cameraTarget(out, look) {
   const d = THREE.MathUtils.lerp(4.6 + p * 3.4 + Math.min(sp, 30) * 0.07, INDOORS.dist, k);
   out.copy(phys.pos).addScaledVector(camDir, -d);
   out.y += THREE.MathUtils.lerp(1.9 + p * 2.1 + Math.min(sp, 30) * 0.025, INDOORS.up + 0.9, k);
-  if (k > 0.5 && cabinRoom.inside(phys.pos.x, phys.pos.z)) cabinRoom.keepIn(out, 0.6);
+  const room = k > 0.5 ? roomAround(phys.pos.x, phys.pos.z) : null;
+  if (room) room.keepIn(out, 0.6);
   out.y = Math.max(out.y, detail.heightAt(out.x, out.z) + THREE.MathUtils.lerp(1.5, 0.9, k));
   look.copy(phys.pos).addScaledVector(camDir, THREE.MathUtils.lerp(3.5 + p * 6.5, INDOORS.ahead, k));
   look.y += THREE.MathUtils.lerp(0.7 - p * 0.3, INDOORS.look + 0.7, k);
@@ -731,10 +742,11 @@ function updateRideCamera(dt) {
     _v.normalize();
     camDir.lerp(_v, 1 - Math.exp(-dt * 2.2)).normalize();
   }
-  indoors += (cabinRoom.room(phys.pos.x, phys.pos.z) - indoors) * (1 - Math.exp(-dt * 2.5));
+  indoors += (roomAt(phys.pos.x, phys.pos.z) - indoors) * (1 - Math.exp(-dt * 2.5));
   cameraTarget(_w, _look);
   camera.position.lerp(_w, 1 - Math.exp(-dt * (6 + indoors * 3)));
-  if (indoors > 0.5 && cabinRoom.inside(phys.pos.x, phys.pos.z)) cabinRoom.keepIn(camera.position, 0.5);
+  const room = indoors > 0.5 ? roomAround(phys.pos.x, phys.pos.z) : null;
+  if (room) room.keepIn(camera.position, 0.5);
   camera.position.y = Math.max(camera.position.y, detail.heightAt(camera.position.x, camera.position.z) + 1.2 - indoors * 0.4);
   camLook.lerp(_look, 1 - Math.exp(-dt * (10 + indoors * 4)));
   camera.lookAt(camLook);
@@ -960,6 +972,7 @@ function frame() {
   onsen.update(dt, time, state === 'soak' && (!goingIn || goingIn.wet) ? rider.root.position : null);
   updateDog(dt);
   updateWheels(dt);
+  updateNpcs(dt);
   // The spout pouring into the pool, heard from 30 m off.
   const { fall } = onsen;
   const spout = fall ? 1 - THREE.MathUtils.smoothstep(Math.hypot(phys.pos.x - fall.x, phys.pos.z - fall.z), 3, 30) : 0;
@@ -992,7 +1005,8 @@ function touchLayout() {
   if (!shown) return;
   if (state === 'ride') {
     const walking = rider.locomotion === 'walk';
-    const act = nearCar ? { label: nearCar.touch.enter, icon: 'in', lit: true }
+    const act = dialogue.open ? { label: 'Next', icon: 'talk', lit: true }
+      : nearCar ? { label: nearCar.touch.enter, icon: 'in', lit: true }
       : nearPool ? { label: 'Soak', icon: 'in', lit: true }
         : nearDog ? { label: 'Pet', icon: 'paw', lit: true }
           : nearWheel ? { label: 'Turn', icon: 'wheel', lit: true }
@@ -1079,7 +1093,8 @@ function updateBoarding() {
   const hall = SERVICE_CENTRES.find((c) => Math.hypot(phys.pos.x - c.x, phys.pos.z - c.z) < 150) ?? null;
   if (hall && hall !== atHall) hud.toast(hall.zh, 2200);
   atHall = hall;
-  if (nearCar) hud.prompt(nearCar.prompt, nearCar.touch.prompt, pressE);
+  if (dialogue.open) hud.prompt(''); // the box says E itself
+  else if (nearCar) hud.prompt(nearCar.prompt, nearCar.touch.prompt, pressE);
   else if (nearPool) hud.prompt('<kbd>E</kbd> soak in the <b>hot spring</b>', 'Soak in the <b>hot spring</b> ▸', pressE);
   else if (nearDog) hud.prompt(`<kbd>E</kbd> pet <b>${DOG.en}</b> · <kbd>Q</kbd> throw a snowball`, `Pet <b>${DOG.en}</b> ▸`, pressE);
   else if (nearWheel) hud.prompt('<kbd>E</kbd> turn the <b>prayer wheel</b>', 'Turn the <b>prayer wheel</b> ▸', pressE);
@@ -1238,6 +1253,38 @@ function petDog() {
   dog.pet(forDog());
   petT = 2.2;
 }
+// ---------- NPCs ----------
+// The cast (npc/cast.js), each sat in the room of their landmark: walking in
+// (on foot or on the board), they look up at you and start talking. Leaving
+// cuts them off; coming back in starts them again.
+const dialogue = new Dialogue(document.getElementById('hud'));
+const npcs = CAST.map((spec) => {
+  const room = rooms.get(spec.home), { seat } = room;
+  const npc = new Npc(spec, { cushion: seat.cushion });
+  npc.root.position.set(seat.x, seat.y, seat.z);
+  npc.root.rotation.y = seat.yaw;
+  scene.add(npc.root);
+  npc.ready.catch((err) => console.warn(`${spec.name} failed to load; they stay out of the game.`, err));
+  return { npc, spec, room, in: false };
+});
+let talking = null; // the one talking
+const _eyes = new THREE.Vector3();
+function updateNpcs(dt) {
+  dialogue.update(dt);
+  const here = state === 'ride' || state === 'intro';
+  _eyes.copy(phys.pos).y += rider.locomotion === 'walk' ? 1.6 : 1.4;
+  for (const n of npcs) {
+    const inside = here && n.room.inside(phys.pos.x, phys.pos.z);
+    if (inside && !n.in && !talking && state === 'ride') {
+      talking = n;
+      dialogue.say(n.spec.name, n.spec.lines, () => { talking = null; });
+    }
+    if (!inside && talking === n) dialogue.close();
+    n.in = inside;
+    n.npc.update(dt, here ? _eyes : null);
+  }
+}
+
 // ---------- The prayer wheels ----------
 // Three racks of seven on the path from 6号's top out to the ovoo (see
 // world/prayer-wheels.js). Walking past them on foot, the hand on their side
@@ -1902,5 +1949,5 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { phys, rider, camera, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { npcs, dialogue, phys, rider, camera, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
 requestAnimationFrame(frame);

@@ -174,6 +174,31 @@ body {
   font-family: 'Patrick Hand SC', cursive; border: 2px solid var(--ink); border-radius: 5px;
   padding: 0 7px; margin: 0 3px; background: #fff;
 }
+/* What the cast say (src/npc/dialogue.js): a paper box at the foot of the
+   screen, the speaker's name on a tab over its corner; tapped, it goes on. */
+#dialogue {
+  position: fixed; left: 50%; bottom: 40px; transform: translate(-50%, 12px);
+  width: min(640px, calc(100vw - 32px)); min-height: 92px; padding: 22px 22px 14px;
+  background: var(--paper); border: 2.5px solid var(--ink); box-shadow: 5px 5px 0 rgba(35, 48, 58, 0.35);
+  font-size: 24px; line-height: 1.3; color: var(--ink); cursor: pointer;
+  opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none;
+}
+#dialogue.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+#dialogue .who {
+  position: absolute; top: -17px; left: 16px; padding: 0 12px 2px;
+  background: var(--accent); border: 2.5px solid var(--ink);
+  font-family: 'Patrick Hand SC', cursive; font-size: 20px; letter-spacing: 1px;
+}
+#dialogue .line { margin: 0; min-height: 1.3em; }
+#dialogue .line a { color: #2f6fc0; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+#dialogue .more { position: absolute; right: 12px; bottom: 6px; font-size: 18px; opacity: 0; }
+#dialogue.done .more { opacity: 1; animation: dialogue-nudge 1s ease-in-out infinite; }
+#dialogue .more kbd {
+  font-family: 'Patrick Hand SC', cursive; border: 2px solid var(--ink); border-radius: 5px; padding: 0 6px; background: #fff;
+}
+@keyframes dialogue-nudge { 50% { transform: translateX(3px); } }
+/* Narrower, it clears the stats in the corner by going over them. */
+@media (max-width: 1000px) { #dialogue { bottom: 112px; } }
 
 /* Sidebar menu: an icon rail on the left edge, with paper panels that open
    beside it. Centred on the gap between the run tag and the stats, which sits
@@ -479,6 +504,9 @@ body.touch #minimap-open { top: calc(14px + env(safe-area-inset-top)); right: ca
 body.touch #minimap { width: 104px; height: 104px; }
 body.touch #minimap-open::after { display: none; }
 body.touch #gps { top: calc(132px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); width: min(240px, calc(100vw - 28px)); }
+/* Over the thumbs, and tapped to go on. */
+body.touch #dialogue { bottom: auto; top: calc(14px + env(safe-area-inset-top) + 64px); font-size: 20px; min-height: 0; }
+body.touch #dialogue .more kbd { display: none; }
 body.touch #toast { font-size: 36px; white-space: normal; width: max-content; max-width: calc(100vw - 32px); text-align: center; }
 /* The prompt sits over the rider, clear of the thumbs; on its side, between them. */
 body.touch #prompt {
