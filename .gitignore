@@ -5,3 +5,6 @@ dist
 
 # Local browser-check screenshots
 output/
+
+# Third-party reference photos kept local (watermarked)
+tools/mountain-review/reference-*.webp

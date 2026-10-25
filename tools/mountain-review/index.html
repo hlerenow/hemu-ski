@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>真实地形 · 雪山审阅 v02</title>
+<style>
+body{margin:0;overflow:hidden;background:#bfe2da;color:#253c46;font:14px system-ui}canvas{display:block;width:100vw;height:100vh}nav{position:absolute;top:16px;left:16px;right:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#fffef3ed;border:1px solid #789296;padding:12px 16px;border-radius:8px}button,select,a{font:inherit;padding:7px 12px;border:1px solid #9aafb2;border-radius:5px;background:#fff;color:inherit}button[aria-pressed=true]{background:#254b57;color:#fff}small{position:absolute;bottom:14px;left:16px;background:#fffef3e8;padding:8px 12px;border-radius:5px;max-width:calc(100vw - 56px)}@media(max-width:600px){nav{gap:6px;padding:8px}strong{width:100%}}
+</style>
+<canvas id="game"></canvas>
+<img id="reference" src="./reference-v02.webp" alt="用户提供的云霄峰东北向西南实拍" hidden style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#18202b">
+<nav><strong>雪山 v02 · 原高程</strong><button id="before" aria-pressed="false">旧远山</button><button id="after" aria-pressed="true">新远山</button><select id="view" aria-label="观察位置"><option value="photo">实拍方向 · 东北望西南</option><option value="north">山顶 · 北侧雪峰</option><option value="east">山顶 · 东侧山脊</option><option value="west">山顶 · 西侧群山</option><option value="valley">山腰 · 下行视野</option></select><select id="light" aria-label="天气"><option value="clear">晴天</option><option value="cloudy">阴天</option><option value="night">夜间</option></select><button id="photo" aria-pressed="false">查看实拍</button><a href="/?time=12&weather=clear" target="_blank">进入游戏</a></nav>
+<small id="status">加载真实场景…</small>
+<script type="module" src="./main.js"></script></html>

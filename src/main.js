@@ -95,7 +95,7 @@ const scenery = createResort(resort, {
 });
 const { terrain, lodges, forest, lifts, onsen, summit, water } = scenery;
 scene.add(scenery.group);
-const backdrop = createBackdrop(resort.backdrop, detail, TREELINE);
+const backdrop = createBackdrop(resort.backdrop, detail);
 scene.add(backdrop);
 // The rings that spread on the water from the boat's oars.
 const ripples = new Ripples();

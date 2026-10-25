@@ -1,0 +1,114 @@
+{
+  "file": "backdrop-dem-v02.u16",
+  "size": 40000,
+  "cells": 1000,
+  "min": 936.7478531816313,
+  "max": 3178.20116196942,
+  "source": "Mapzen Terrain Tiles / Skadi N48E087, SRTM-derived global DEM",
+  "sourceUrl": "https://s3.amazonaws.com/elevation-tiles-prod/skadi/N48/N48E087.hgt.gz",
+  "sourceSha256": "7c80a19307a11e4f591bf6784cbb822556b4716de305cb5cb167750ee91cd466",
+  "sha256": "5ac0c4240e35eb9090471dc5e541a5359e86cb3146e14504cd4255e3de70e329",
+  "datum": "WGS84 horizontal / EGM96 geoid vertical; metres",
+  "sourcePosts": 3601,
+  "sourceSpacingArcSeconds": 1,
+  "outputSpacingMetres": 40,
+  "processing": "Bilinear sampling and uint16 quantization only; no smoothing, scale, offset, or procedural displacement",
+  "maxQuantizationErrorMetres": 0.01710118632990998,
+  "gondola6Top": {
+    "lonLat": [
+      87.55406716044205,
+      48.62950465325438
+    ],
+    "elevation": 2756.1414706928713
+  },
+  "sectors3to20km": [
+    {
+      "bearing": 0,
+      "elevation": 3135.952013948381,
+      "x": -3360,
+      "z": -18760,
+      "distance": 18727.667872495498,
+      "lonLat": [
+        87.5039333567966,
+        48.79445779730082
+      ]
+    },
+    {
+      "bearing": 45,
+      "elevation": 3093.4179030232735,
+      "x": 12400,
+      "z": -16040,
+      "distance": 19741.049008158105,
+      "lonLat": [
+        87.71812462372685,
+        48.770023621572776
+      ]
+    },
+    {
+      "bearing": 90,
+      "elevation": 3000.322274392979,
+      "x": 4680,
+      "z": -1520,
+      "distance": 4471.835858179501,
+      "lonLat": [
+        87.61320352089045,
+        48.63958824231862
+      ]
+    },
+    {
+      "bearing": 135,
+      "elevation": 2839.595743733612,
+      "x": 17960,
+      "z": 8720,
+      "distance": 19833.216681680762,
+      "lonLat": [
+        87.79368956307533,
+        48.54760075722478
+      ]
+    },
+    {
+      "bearing": 180,
+      "elevation": 2661.3716625097313,
+      "x": 7520,
+      "z": 16960,
+      "distance": 18785.663787646685,
+      "lonLat": [
+        87.65180143955048,
+        48.47357957781333
+      ]
+    },
+    {
+      "bearing": 225,
+      "elevation": 2382.4567716122365,
+      "x": -17600,
+      "z": 7040,
+      "distance": 19431.93937677091,
+      "lonLat": [
+        87.31040013083933,
+        48.56269245399799
+      ]
+    },
+    {
+      "bearing": 270,
+      "elevation": 3171.587083417763,
+      "x": -7680,
+      "z": -2600,
+      "distance": 8324.813507971214,
+      "lonLat": [
+        87.4452210298208,
+        48.64929004738711
+      ]
+    },
+    {
+      "bearing": 315,
+      "elevation": 3142.1079832800447,
+      "x": -10000,
+      "z": -16080,
+      "distance": 18784.90297932092,
+      "lonLat": [
+        87.41369033570416,
+        48.77038294768642
+      ]
+    }
+  ]
+}

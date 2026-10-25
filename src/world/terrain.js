@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { makeToon } from '../render/toon.js';
 import { PISTE_HALF_WIDTH } from './data.js';
+import { mountainMaterial } from './mountain-material.js';
 
 const C = {
   snow: new THREE.Color('#fbfaf4'),
@@ -8,8 +9,8 @@ const C = {
   groomed: new THREE.Color('#e6eef0'),
   hollow: new THREE.Color('#cbdce2'),
   crest: new THREE.Color('#ffffff'),
-  rock: new THREE.Color('#8f8c86'),
-  rockDark: new THREE.Color('#6f7472'),
+  rock: new THREE.Color('#5f6265'),
+  rockDark: new THREE.Color('#4f5357'),
   forest: new THREE.Color('#4f6f5e'),
   forestDark: new THREE.Color('#3e5a4f'),
 };
@@ -47,10 +48,22 @@ function gridGeometry(hf, yOffset) {
       idx[t++] = a; idx[t++] = c; idx[t++] = b;
       idx[t++] = b; idx[t++] = c; idx[t++] = d;
     }
+  // Normals straight from the neighbouring heights: on a grid this big it is
+  // several times quicker than computeVertexNormals, and looks the same.
+  const nrm = new Float32Array(verts * verts * 3), step = size / hf.cells;
+  for (let j = 0; j < verts; j++)
+    for (let i = 0; i < verts; i++) {
+      const k = j * verts + i;
+      const w = i ? k - 1 : k, e = i < hf.cells ? k + 1 : k, n = j ? k - verts : k, s = j < hf.cells ? k + verts : k;
+      const dx = (pos[e * 3 + 1] - pos[w * 3 + 1]) / ((e - w) * step);
+      const dz = (pos[s * 3 + 1] - pos[n * 3 + 1]) / (((s - n) / verts) * step);
+      const l = Math.hypot(dx, 1, dz);
+      nrm[k * 3] = -dx / l; nrm[k * 3 + 1] = 1 / l; nrm[k * 3 + 2] = -dz / l;
+    }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
   g.setIndex(new THREE.BufferAttribute(idx.subarray(0, t), 1));
-  g.computeVertexNormals();
   return g;
 }
 
@@ -163,7 +176,7 @@ function snowColor(x, y, z, ny, pd, treeline, c) {
   const groom = 1 - THREE.MathUtils.smoothstep(pd, PISTE_HALF_WIDTH - 3, PISTE_HALF_WIDTH + 1);
   c.lerp(C.groomed, groom * 0.9);
   // Wind-scoured rock on steep faces.
-  const rockT = THREE.MathUtils.smoothstep(slopeDeg + (n - 0.5) * 12, 34, 40) * (1 - groom);
+  const rockT = THREE.MathUtils.smoothstep(slopeDeg + (n - 0.5) * 22, 44, 62) * (1 - groom);
   if (rockT > 0) c.lerp(vnoise(x * 0.08, z * 0.08) > 0.5 ? C.rock : C.rockDark, rockT);
   // Under the forest canopy the snow is a touch greyer.
   if (y < treeline && pd > PISTE_HALF_WIDTH + 4) c.lerp(C.snowShade, 0.5);
@@ -243,29 +256,79 @@ function skirtGeometry(hf, sample) {
   return geo;
 }
 
-// `clearings` ([{ x, z, r }]) open the taiga up around buildings.
-export function createBackdrop(hf, detail, treeline, clearings = []) {
-  // Sink the part that sits under the detailed terrain.
-  const g = gridGeometry(hf, (x, z) => (detail.inside(x, z, 20) ? -80 : 0));
-  const pos = g.attributes.position, nrm = g.attributes.normal;
-  const col = new Float32Array(pos.count * 3);
-  const c = new THREE.Color();
-  for (let k = 0; k < pos.count; k++) {
-    const x = pos.getX(k), y = pos.getY(k), z = pos.getZ(k);
-    const slope = (Math.acos(Math.min(1, nrm.getY(k))) * 180) / Math.PI;
-    const n = vnoise(x * 0.0015, z * 0.0015);
-    c.copy(C.snow).lerp(C.snowShade, n);
-    // Taiga covers the valleys and lower slopes of the Altai.
-    let forest = THREE.MathUtils.smoothstep(treeline + 120 - y + (n - 0.5) * 250, 0, 150) *
-      (1 - THREE.MathUtils.smoothstep(slope, 30, 40));
-    // Stands of trees with snowy meadows between them, as on the trail map.
-    forest *= 0.3 + 0.7 * THREE.MathUtils.smoothstep(vnoise(x * 0.0011 + 7, z * 0.0011), 0.38, 0.62);
-    for (const cl of clearings) forest *= 0.3 + 0.7 * THREE.MathUtils.smoothstep(Math.hypot(x - cl.x, z - cl.z), cl.r, cl.r * 3);
-    c.lerp(n > 0.5 ? C.forest : C.forestDark, forest * 0.85);
-    const rockT = THREE.MathUtils.smoothstep(slope, 33, 42);
-    c.lerp(C.rockDark, rockT * 0.8);
-    col[k * 3] = c.r; col[k * 3 + 1] = c.g; col[k * 3 + 2] = c.b;
+// A grid of n × n heights blurred by about `sigma` cells: three box blurs
+// each way, which come out close to a gaussian.
+function blurGrid(src, n, sigma) {
+  const r = Math.max(1, Math.round(Math.sqrt(sigma * sigma * 4 + 1) / 2 - 0.5)), w = 2 * r + 1;
+  const a = Float32Array.from(src), b = new Float32Array(n * n), line = new Float32Array(n + w);
+  // One box pass along every row (stride 1) or column (stride n), the edges
+  // held at their last value.
+  const pass = (from, to, stride, start) => {
+    for (let j = 0; j < n; j++) {
+      const o = j * start;
+      for (let i = 0; i < n + w; i++) line[i] = from[o + Math.max(0, Math.min(n - 1, i - r)) * stride];
+      let s = 0;
+      for (let i = 0; i < w; i++) s += line[i];
+      for (let i = 0; i < n; i++) {
+        to[o + i * stride] = s / w;
+        s += line[i + w] - line[i];
+      }
+    }
+  };
+  for (let p = 0; p < 3; p++) { pass(a, b, 1, n); pass(b, a, n, 1); }
+  return a;
+}
+
+// How much ground drains through each post of an n × n height grid, as log2
+// of the posts upstream (D8: each post spills to its steepest-down
+// neighbour), blurred a little. Gullies come out as branching lines of every
+// length, as a world-building tool's flow map does.
+function flowMap(h, n) {
+  const N = n * n, keys = new Float64Array(N);
+  for (let k = 0; k < N; k++) keys[k] = Math.round(h[k] * 100) * 1048576 + k;
+  keys.sort();
+  const acc = new Float32Array(N).fill(1);
+  for (let o = N - 1; o >= 0; o--) {
+    const k = keys[o] % 1048576, i = k % n, j = (k - i) / n;
+    let best = -1, drop = 0;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      const x = i + di, z = j + dj;
+      if ((!di && !dj) || x < 0 || z < 0 || x >= n || z >= n) continue;
+      const q = z * n + x, g = (h[k] - h[q]) / (di && dj ? 1.414 : 1);
+      if (g > drop) { drop = g; best = q; }
+    }
+    if (best >= 0) acc[best] += acc[k];
   }
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  return new THREE.Mesh(g, makeToon({ vertexColors: true }, { hatch: 0 }));
+  for (let k = 0; k < N; k++) acc[k] = Math.log2(acc[k]);
+  return blurGrid(acc, n, 1);
+}
+
+export function createBackdrop(hf, detail) {
+  // Use DEM heights unchanged. Only the hidden overlap is sunk, as before.
+  // No synthetic peaks, vertical exaggeration, noise displacement or smoothing.
+  const g = gridGeometry(hf, (x, z) => (detail.inside(x, z, 20) ? -80 : 0));
+  // Where rock shows through the snow is read off the DEM's own shape: how
+  // high each point stands within its own mountain (against the ground
+  // about 1.5 km round it, and 500 m round, for the lesser tops and crests),
+  // the slope, and the ribs standing above what's round them (across 120 m). All on heights smoothed over 40 m, so
+  // the pattern is the mountains' and not the DEM's post-to-post noise. It
+  // colours the ground and never moves a vertex.
+  const n = hf.verts, cell = (m) => Math.max(1, m / hf.step);
+  const soft = blurGrid(hf.h, n, cell(40)), fine = blurGrid(hf.h, n, cell(120)), wide = blurGrid(hf.h, n, cell(1500));
+  const near = blurGrid(hf.h, n, cell(500));
+  const relief = new Float32Array(n * n * 4);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const k = j * n + i;
+    const w = i ? k - 1 : k, e = i < n - 1 ? k + 1 : k, nn = j ? k - n : k, s = j < n - 1 ? k + n : k;
+    const gx = (soft[e] - soft[w]) / ((e - w) * hf.step), gz = (soft[s] - soft[nn]) / (((s - nn) / n) * hf.step);
+    relief[k * 4] = soft[k] - fine[k];
+    relief[k * 4 + 1] = (Math.atan(Math.hypot(gx, gz)) * 180) / Math.PI;
+    relief[k * 4 + 2] = soft[k] - wide[k];
+    relief[k * 4 + 3] = soft[k] - near[k];
+  }
+  g.setAttribute('aRelief', new THREE.BufferAttribute(relief, 4));
+  g.setAttribute('aFlow', new THREE.BufferAttribute(flowMap(soft, n), 1));
+  const mesh = new THREE.Mesh(g, mountainMaterial());
+  mesh.name = 'dem-backdrop';
+  return mesh;
 }
