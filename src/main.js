@@ -28,6 +28,7 @@ import { RouteMarks } from './gps/marks.js';
 import { Sound } from './audio.js';
 import { createMenu } from './menu.js';
 import { TouchPad } from './touch.js';
+import { MouseLook, swing } from './mouse-look.js';
 import { createIsland, createTitleLetters, createSnowSpecks, createCloudWipe } from './intro.js';
 import {
   destinationFromURL, destinationKey, runTop, noteArrival, takeArrivalNote, whereaboutsParam, saveWhereabouts,
@@ -480,6 +481,24 @@ for (const b of wxKinds)
     saveWeather();
   });
 window.addEventListener('pagehide', saveWeather);
+
+// ---------- Settings ----------
+// Mouse look (see mouse-look.js): on, a click on the view while you're riding,
+// driving or soaking takes the pointer and the mouse swings the camera round
+// you. Remembered between visits.
+const mouseLook = new MouseLook(canvas);
+mouseLook.wanted = () => state === 'ride' || state === 'drive' || state === 'soak';
+{
+  const box = document.getElementById('set-mouselook');
+  const set = (on) => { mouseLook.set(on); box.checked = on; };
+  set(menu.prefs.mouseLook === true);
+  box.addEventListener('change', () => {
+    set(box.checked);
+    menu.prefs.mouseLook = box.checked;
+    menu.save();
+    if (box.checked) hud.toast('Click the view to look around · Esc frees the mouse', 2600);
+  });
+}
 // The clock, kept up while the panel's open (and the slider with it, unless
 // it's in your hand).
 function updateWeatherPanel() {
@@ -524,6 +543,7 @@ function startRun(at = spawn) {
   elapsed = 0; timing = false; falls = 0;
   rider.pose.tumble = 0;
   camDir.set(at.dx, 0, at.dz);
+  mouseLook.reset();
   snapCamera();
   state = 'ride';
   hud.show(true);
@@ -588,11 +608,28 @@ function cameraTarget(out, look) {
   const d = THREE.MathUtils.lerp(4.6 + p * 3.4 + Math.min(sp, 30) * 0.07, INDOORS.dist, k);
   out.copy(phys.pos).addScaledVector(camDir, -d);
   out.y += THREE.MathUtils.lerp(1.9 + p * 2.1 + Math.min(sp, 30) * 0.025, INDOORS.up + 0.9, k);
+  look.copy(phys.pos).addScaledVector(camDir, THREE.MathUtils.lerp(3.5 + p * 6.5, INDOORS.ahead, k));
+  look.y += THREE.MathUtils.lerp(0.7 - p * 0.3, INDOORS.look + 0.7, k);
+  if (mouseLook.yaw || mouseLook.pitch) {
+    ridePivot(_pv);
+    swing(out, _pv, camDir, mouseLook.yaw, mouseLook.pitch);
+    swing(look, _pv, camDir, mouseLook.yaw, mouseLook.pitch);
+  }
   const room = k > 0.5 ? roomAround(phys.pos.x, phys.pos.z) : null;
   if (room) room.keepIn(out, 0.6);
   out.y = Math.max(out.y, detail.heightAt(out.x, out.z) + THREE.MathUtils.lerp(1.5, 0.9, k));
-  look.copy(phys.pos).addScaledVector(camDir, THREE.MathUtils.lerp(3.5 + p * 6.5, INDOORS.ahead, k));
-  look.y += THREE.MathUtils.lerp(0.7 - p * 0.3, INDOORS.look + 0.7, k);
+}
+// Mouse look swings the camera round the rider's chest (or the vehicle's look
+// point), and turns the camera on the screen at once by however far the mouse
+// moved since the last frame, so the follow below has nothing to catch up.
+const _pv = new THREE.Vector3(), _ld = new THREE.Vector3();
+const ridePivot = (out) => out.copy(phys.pos).setY(phys.pos.y + 1.1);
+function swingCamera(pivot) {
+  const d = mouseLook.take();
+  if (!d.yaw && !d.pitch) return;
+  _ld.subVectors(camLook, camera.position).setY(0).normalize();
+  swing(camera.position, pivot, _ld, d.yaw, d.pitch);
+  swing(camLook, pivot, _ld, d.yaw, d.pitch);
 }
 function snapCamera() {
   cameraTarget(camera.position, camLook);
@@ -752,6 +789,7 @@ function updateRideCamera(dt) {
     camDir.lerp(_v, 1 - Math.exp(-dt * 2.2)).normalize();
   }
   indoors += (roomAt(phys.pos.x, phys.pos.z) - indoors) * (1 - Math.exp(-dt * 2.5));
+  swingCamera(ridePivot(_pv));
   cameraTarget(_w, _look);
   camera.position.lerp(_w, 1 - Math.exp(-dt * (6 + indoors * 3)));
   const room = indoors > 0.5 ? roomAround(phys.pos.x, phys.pos.z) : null;
@@ -1348,7 +1386,9 @@ const throwDir = new THREE.Vector3();
 const _throw = new THREE.Vector3();
 function throwSnowball() {
   if (!phys.grounded || phys.crashed > 0 || dog.ball.busy || rider.throwT !== null) return;
-  throwDir.copy(camDir).setY(0).normalize();
+  if (mouseLook.on) camera.getWorldDirection(throwDir); // where you're looking
+  else throwDir.copy(camDir);
+  throwDir.setY(0).normalize();
   if (!rider.startThrow()) return;
   _throw.copy(phys.pos).addScaledVector(throwDir, 0.3).y += 1.5; // about where it'll leave the hand
   dog.throwBall(_throw, throwDir, THROW.release);
@@ -1488,10 +1528,18 @@ function driveCameraTarget(out, look) {
   out.y = Math.max(out.y, detail.heightAt(out.x, out.z) + 1.5);
   look.copy(drive.pos).addScaledVector(camDir, cam.ahead * (1 + p * 0.6));
   look.y += cam.look;
+  if (mouseLook.yaw || mouseLook.pitch) {
+    _pv.copy(drive.pos).y += cam.look;
+    swing(out, _pv, camDir, mouseLook.yaw, mouseLook.pitch);
+    swing(look, _pv, camDir, mouseLook.yaw, mouseLook.pitch);
+    out.y = Math.max(out.y, detail.heightAt(out.x, out.z) + 1.5);
+  }
 }
 function updateDriveCamera(dt) {
   const drive = car.phys;
   camDir.lerp(drive.forward(_v), 1 - Math.exp(-dt * 3)).normalize();
+  _pv.copy(drive.pos).y += car.cam.look;
+  swingCamera(_pv);
   driveCameraTarget(_w, _look);
   const follow = car.cam.follow ?? 6;
   camera.position.lerp(_w, 1 - Math.exp(-dt * follow));
@@ -1724,7 +1772,7 @@ function settle() {
 
 function updateSoakCamera(dt) {
   const { seat } = onsen, p = portrait();
-  soakLook += input.steer * dt * 1.1;
+  soakLook += input.steer * dt * 1.1 + mouseLook.take().yaw;
   // Getting in, after her as she goes, from off to her side (to see her steps)
   // and further back; swinging round behind her seat once she's sat down.
   const g = goingIn, at = g ? rider.root.position : seat;
@@ -1958,5 +2006,5 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { npcs, dialogue, phys, rider, camera, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { npcs, dialogue, phys, rider, camera, mouseLook, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
 requestAnimationFrame(frame);

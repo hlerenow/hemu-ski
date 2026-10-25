@@ -171,8 +171,17 @@ male, female or the classic one; the female rider can also walk and run off the
 board with F) and switches music and sound effects on and off. The game
 remembers your rider and those settings between visits, so you keep the same
 rider after a trip to the diorama; `?rider=male|female|classic` in the URL picks
-one too. Its **Outfit & gear** and **Settings** panels are placeholders for now,
-and nothing plays on the music bus yet.
+one too. Its **Outfit & gear** panel is a placeholder for now, and nothing plays
+on the music bus yet.
+
+**Settings** has **Mouse look**, for a mouse and keyboard. With it on, a click
+on the view takes the pointer, as in a third-person shooter, and the mouse
+swings the camera round you, all the way round and from under your chin to
+nearly overhead, while you ride, drive, fly, row or soak; the keys steer as
+before, and a snowball goes where you look. Esc frees the pointer. Where the
+browser won't hand the pointer over, dragging across the view looks round
+instead. The camera stays where you swing it until you turn the setting off or
+start again (R).
 
 **Weather & time**, on the same rail, sets the clock (a slider, or straight to
 sunrise, noon, sunset or night), lets the day go by on its own (a game minute

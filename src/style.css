@@ -289,7 +289,8 @@ body {
 #menu .check { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 17px; cursor: pointer; }
 #menu .check input { width: 18px; height: 18px; accent-color: var(--ink); margin: 0; }
 #menu .keys { font-size: 16px; line-height: 1.6; }
-#menu .touch-keys, #menu .toggle { display: none; }
+#menu .touch-keys, #menu .toggle, #menu .touch-only { display: none; }
+#menu .note { font-size: 16px; line-height: 1.35; opacity: 0.75; }
 #menu kbd {
   font-family: 'Patrick Hand SC', cursive; border: 2px solid var(--ink); border-radius: 4px;
   padding: 0 5px; background: #fff;
@@ -534,6 +535,9 @@ body.touch .mi::after { display: none; }
 body.touch #menu .flyout { width: min(320px, calc(100vw - 28px)); margin-top: 16px; }
 body.touch #menu .keys:not(.touch-keys) { display: none; }
 body.touch #menu .touch-keys { display: block; }
+/* Mouse look needs a mouse. */
+body.touch #menu .mouse-look { display: none; }
+body.touch #menu .touch-only { display: block; }
 
 body.touch .panel {
   bottom: calc(14px + env(safe-area-inset-bottom)); width: min(620px, calc(100vw - 28px));
