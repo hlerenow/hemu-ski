@@ -55,6 +55,11 @@ const DOWN = new THREE.Vector3(0, -1, 0);
 const FWD = new THREE.Vector3(0, 0, 1);
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _r = new THREE.Quaternion(), _e = new THREE.Euler();
+// How much of its turn the thumb's root takes in a grip (see #wrapThumb), and
+// how far out from the index finger its tip lies, in thumb lengths.
+const THUMB_ROOT = 0.5, THUMB_GAP = 0.3;
+const IDENTITY = new THREE.Quaternion();
+const _c = new THREE.Vector3(), _t = new THREE.Vector3(), _u = new THREE.Vector3(), _s = new THREE.Quaternion();
 
 export class RiderModel {
   // `outfit` names one of RIDER_MODELS[id].outfits, sized to `fit`: the
@@ -171,17 +176,24 @@ export class RiderModel {
       reach: (this.upperArm + this.foreArm + this.palm) * S,
     };
     // Each finger joint curls about the axis across its finger, toward the palm
-    // (down, in the T-pose), kept in the joint's own frame.
+    // (down, in the T-pose), kept in the joint's own frame. The thumb wraps
+    // round the other way (see #wrapThumb), so it isn't one of them.
     this.fingers = [];
-    for (const side of ['Left', 'Right'])
-      for (const finger of FINGERS)
+    this.thumbs = {};
+    for (const side of ['Left', 'Right']) {
+      for (const finger of FINGERS.slice(1))
         for (let j = 1; j <= 3; j++) {
           const bone = byName[`${side}Hand${finger}${j}`], next = byName[`${side}Hand${finger}${j + 1}`];
           if (!bone || !next) continue;
           const axis = at(next).sub(at(bone)).normalize().cross(DOWN).normalize();
           const boneQ = rootQinv.clone().multiply(bone.getWorldQuaternion(new THREE.Quaternion()));
-          this.fingers.push({ bone, axis: axis.applyQuaternion(boneQ.invert()), angle: finger === 'Thumb' ? 0.45 : 1.0 });
+          this.fingers.push({ bone, side, axis: axis.applyQuaternion(boneQ.invert()), angle: 1.0 });
         }
+      const thumb = [1, 2, 3, 4].map((j) => byName[`${side}HandThumb${j}`]);
+      const knuckles = [2, 3].map((j) => byName[`${side}HandIndex${j}`]);
+      if (thumb.every(Boolean) && knuckles.every(Boolean) && byName[`${side}HandMiddle2`])
+        this.thumbs[side] = { thumb, knuckles, middle: byName[`${side}HandMiddle2`], length: at(thumb[0]).distanceTo(at(thumb[3])) };
+    }
   }
 
   // Takes up `mode` (and in 'act', `clip`) at once, with no fade from the pose
@@ -395,7 +407,7 @@ export class RiderModel {
       f.bone.updateMatrixWorld(true);
     }
     // On skis the hands close round the poles' grips.
-    if (rider.skiing) for (const { bone, axis, angle } of this.fingers) bone.quaternion.multiply(_q.setFromAxisAngle(axis, angle * 0.9));
+    if (rider.skiing) this.#fist(0.9);
   }
 
   // Where the middle of a palm is (world), `side` 'Left' or 'Right'.
@@ -440,7 +452,7 @@ export class RiderModel {
     hips.position.lerpVectors(hipsFrom, hips.position.clone(), w);
     // The ball hand closed round it until it lets go.
     const grip = k.grip * w * (t < THROW.release ? 1 : 1 - THREE.MathUtils.smoothstep(t, THROW.release, THROW.release + 0.08));
-    if (grip > 0) for (const f of this.fingers) if (f.bone.name.includes('RightHand')) f.bone.quaternion.multiply(_q.setFromAxisAngle(f.axis, f.angle * 0.9 * grip));
+    if (grip > 0) this.#fist(0.9 * grip, ['Right']);
   }
 
   // Two-bone IK for a leg on foot: the ankle over `spot` ([x, z], body frame,
@@ -499,7 +511,59 @@ export class RiderModel {
   #grip(grips) {
     this.root.updateMatrixWorld(true);
     for (const [i, side, sign] of [[0, 'Left', 1], [1, 'Right', -1]]) this.#armTo(side, sign, this.#fromBody(grips[i], new THREE.Vector3()));
-    for (const { bone, axis, angle } of this.fingers) bone.quaternion.multiply(_q.setFromAxisAngle(axis, angle));
+    this.#fist(1);
+  }
+
+  // Closes `sides`' hands round a grip, `k` of the way: the fingers curl under
+  // it and the thumb wraps round the other side (see #wrapThumb).
+  #fist(k, sides = ['Left', 'Right']) {
+    for (const { bone, side, axis, angle } of this.fingers)
+      if (sides.includes(side)) bone.quaternion.multiply(_q.setFromAxisAngle(axis, angle * k));
+    for (const side of sides) this.#wrapThumb(side, Math.min(1, k / 0.9));
+  }
+
+  // The thumb round the far side of what the curled fingers hold, from the
+  // heel of the hand the other way round from them, its tip a little out from
+  // the index finger's middle bone, `w` of the way there. The hole in the fist
+  // is halfway between the palm and the curled middle finger; the thumb bends
+  // at its two outer joints toward it, as much as brings its tip within reach,
+  // then turns at its root and its middle joint to lay the tip there.
+  #wrapThumb(side, w) {
+    const t = this.thumbs[side];
+    if (!t || w <= 0) return;
+    const [t1, t2, t3, tip] = t.thumb;
+    this.bones[side + 'Hand'].bone.updateMatrixWorld(true);
+    const from = [t1, t2, t3].map((b) => b.quaternion.clone());
+    const hole = this.palmAt(side, _c).lerp(t.middle.getWorldPosition(_a), 0.5);
+    const target = t.knuckles[0].getWorldPosition(_t).lerp(t.knuckles[1].getWorldPosition(_a), 0.5);
+    target.addScaledVector(_a.subVectors(target, hole).normalize(), t.length * this.scale * THUMB_GAP);
+    const base = t1.getWorldPosition(new THREE.Vector3());
+    const reach = target.distanceTo(base);
+    // Bending about this turns the thumb from the target toward the hole.
+    const axis = new THREE.Vector3().subVectors(target, base).cross(_b.subVectors(hole, base)).normalize();
+    const bend = (angle) => {
+      t2.quaternion.copy(from[1]); t3.quaternion.copy(from[2]);
+      for (const b of [t2, t3]) this.#turnWorld(b, _q.setFromAxisAngle(axis, angle));
+      return tip.getWorldPosition(_u).distanceTo(base);
+    };
+    let lo = 0, hi = 1.1;
+    if (bend(0) > reach) for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; if (bend(mid) > reach) lo = mid; else hi = mid; }
+    bend(lo);
+    // The root takes only part of the turn, the middle joint the rest: the
+    // root swings the thumb's whole base, and half as much of the glove with
+    // it this way.
+    this.#turnWorld(t1, _q.setFromUnitVectors(tip.getWorldPosition(_u).sub(base).normalize(), _b.subVectors(target, base).normalize()).slerp(IDENTITY, 1 - THUMB_ROOT));
+    const mid = t2.getWorldPosition(new THREE.Vector3());
+    this.#turnWorld(t2, _q.setFromUnitVectors(tip.getWorldPosition(_u).sub(mid).normalize(), _b.subVectors(target, mid).normalize()));
+    [t1, t2, t3].forEach((b, i) => b.quaternion.slerpQuaternions(from[i], b.quaternion.clone(), w));
+    t1.updateMatrixWorld(true);
+  }
+
+  // Turns `bone` by `turn`, a rotation in world space.
+  #turnWorld(bone, turn) {
+    bone.parent.getWorldQuaternion(_s).invert().multiply(turn).multiply(bone.getWorldQuaternion(_r));
+    bone.quaternion.copy(_s);
+    bone.updateMatrixWorld(true);
   }
 
   // A world-space hand contact during a fall, layered over the pose.

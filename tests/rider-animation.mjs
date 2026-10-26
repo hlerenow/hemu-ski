@@ -236,6 +236,27 @@ try {
     console.log(`PASS male walks at ${speed} m/s: limbs within ${deg.toFixed(1)}° of hers`);
   }
 
+  // On skis the hands close round the poles: the fingers curl one way round
+  // the fist, from the knuckles, and the thumb the other way, from the heel of
+  // the hand, until its tip is round the far side from the palm.
+  for (const [label, subject] of [['female', her], ['male', male]]) {
+    const skier = { ...rider, skiing: true };
+    for (let i = 0; i < 30; i++) subject.update(1 / 60, skier, 'ride', 0); // past the fade from walking
+    subject.root.updateMatrixWorld(true);
+    for (const side of ['Left', 'Right']) {
+      const at = (name) => (subject.root.getObjectByName(`mixamorig${side}Hand${name}`) ?? subject.root.getObjectByName(`mixamorig:${side}Hand${name}`)).getWorldPosition(new THREE.Vector3());
+      const palm = subject.palmAt(side, new THREE.Vector3()), hole = palm.clone().lerp(at('Middle2'), 0.5);
+      const middle = subject.fingers.find((f) => f.bone.name.endsWith(`${side}HandMiddle1`));
+      const axis = middle.axis.clone().applyQuaternion(middle.bone.getWorldQuaternion(new THREE.Quaternion()));
+      const flat = (p) => { const v = p.sub(hole); return v.addScaledVector(axis, -v.dot(axis)); };
+      const toPalm = flat(palm.clone());
+      const round = (name) => { const v = flat(at(name)); return THREE.MathUtils.radToDeg(Math.atan2(toPalm.clone().cross(v).dot(axis), toPalm.dot(v))); };
+      const knuckle = round('Index1'), thumbMid = round('Thumb2'), thumbTip = round('Thumb4');
+      assert(knuckle > 30 && thumbMid < -30, `${label} ${side}: thumb (${thumbMid.toFixed(0)}°) comes round the other way from the fingers (${knuckle.toFixed(0)}°)`);
+      assert(thumbTip < -130, `${label} ${side}: thumb tip round the far side (${thumbTip.toFixed(0)}°)`);
+      console.log(`PASS ${label} ${side} ski grip: fingers from ${knuckle.toFixed(0)}°, thumb tip at ${thumbTip.toFixed(0)}° round the fist`);
+    }
+  }
 } finally {
   await server.close();
 }
