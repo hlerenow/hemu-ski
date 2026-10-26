@@ -179,6 +179,8 @@ export class Rider {
     this.body.add(...this.poles);
     for (const g of [...this.skis, ...this.poles]) g.visible = false;
     this.kneeShift = 0; // both knees pushed toward +x (into a turn on skis)
+    this.skiHand = [new THREE.Vector3(), new THREE.Vector3()];
+    this.skiHands = null; // on skis: where each hand goes (body frame), left and right
     this.seat = null; // on a vehicle: see setLocomotion
     // A world point the right hand reaches out to (petting the dog), or null,
     // and how far into reaching it is (0–1), easing in and out. On foot,
@@ -558,6 +560,8 @@ export class Rider {
     const targetYaw = afoot || sitting || (skiing && !this.fall) ? Math.PI : Math.PI / 2;
     this.body.rotation.y += (targetYaw - this.body.rotation.y) * Math.min(1, dt / 0.08);
     if (afoot || sitting) { this.edge.rotation.set(0, 0, 0); this.edge.position.set(0, 0, 0); }
+    // On skis the rig's hands go where the classic mitts got to (see RiderModel).
+    this.skiHands = skiing && !this.fall ? [this.#mitt(this.armL, this.skiHand[0]), this.#mitt(this.armR, this.skiHand[1])] : null;
     this.model?.update(dt, this, this.locomotion, s.speed || 0);
     if (skiing) this.#poles();
   }
@@ -641,6 +645,12 @@ export class Rider {
       pole.position.copy(hand);
       pole.quaternion.setFromUnitVectors(DOWN, dir);
     }
+  }
+
+  // Where the classic `arm`'s mitt is, in the body's frame: what its IK reached.
+  #mitt(arm, out) {
+    arm.el.updateWorldMatrix(true, false);
+    return this.body.worldToLocal(arm.el.localToWorld(out.set(0, -0.25, 0.01)));
   }
 
   // Where the middle of a palm is (world), on the rig if there is one.

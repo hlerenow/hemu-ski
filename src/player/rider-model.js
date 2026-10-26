@@ -372,6 +372,12 @@ export class RiderModel {
         .applyQuaternion(dUpper.clone().invert());
       this.#turn(side + 'ForeArm', _q.setFromUnitVectors(foreBind, fore.normalize()));
     }
+    // On skis each hand goes onto the spot the classic mitt reached, by IK on
+    // this rig's own arms: its shoulders stand further back, so the copied
+    // angles leave the hands short (in a tuck, under the chin).
+    if (rider.skiing && rider.skiHands) {
+      for (const [i, side, sign] of [[0, 'Left', 1], [1, 'Right', -1]]) this.#armTo(side, sign, this.#fromBody(rider.skiHands[i], new THREE.Vector3()));
+    }
 
     // Legs: two-bone IK from each hip socket to the ankle above its binding.
     this.root.updateMatrixWorld(true);

@@ -217,13 +217,15 @@ export class SkiPose {
       }
     }
 
-    // Tuck: folded low over the skis, head up, hands together at the face,
-    // the poles tucked back under the arms.
+    // Tuck: folded low over the skis, head up, hands together in front of the
+    // chin, the elbows down by the knees, the poles tucked back under the arms.
+    // The fold brings the shoulders about 0.2 up and 0.43 ahead of the hips:
+    // the hands go well ahead of them, or the elbows fold back past the body.
     if (tuck > 0) {
       o.py -= 0.2 * tuck; o.pz -= 0.07 * tuck;
       o.pPitch += 0.45 * tuck; o.tPitch += 0.55 * tuck; o.hPitch -= 0.75 * tuck;
-      this.#hands(0.09, 0.3, 0.28, -0.09, 0.3, 0.28, tuck);
-      this.#tips(0.24, 0.8, -0.95, -0.24, 0.8, -0.95, tuck);
+      this.#hands(0.08, 0.11, 0.7, -0.08, 0.11, 0.7, tuck);
+      this.#tips(0.42, 0.85, -0.9, -0.42, 0.85, -0.9, tuck);
     }
     // Loading a jump.
     if (charge > 0.001) {
