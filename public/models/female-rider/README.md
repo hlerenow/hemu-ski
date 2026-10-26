@@ -5,7 +5,7 @@ Copied verbatim from the asset lab's `03-tripo-exports/female-rider-studio-v03/`
 - `female-rider-rigfix-walk-run-tex2k-v03.glb`: SHA-256 `3b0a183b0d0e80b8953a5142340347ce399990f4397f76538cdb7a9d2d8f871d`; includes the existing rigid-head and run-hip corrections. No runtime reprocessing.
 - `board-assembly-seg-tex2k-v01.glb`: SHA-256 `31c402f7d86537671f8104a89607946d3478999e844fb0224cbabfc9147301b4`.
 
-Female total height is independently set to 1.8 m (including cat ears), male 1.7 m. Riding uses the unchanged procedural pose and two-bone IK. Walking uses AnimationMixer, with smooth speed weights between walk (1.4 m/s) and run (4 m/s). The 0.25 s mode transition blends from the outgoing complete bone pose; returning to riding restores all 65 bones before applying IK.
+Female total height is set to 1.8 m (including cat ears), which makes her trunk (Hips to Head joint) 0.591 m. The male is sized by his trunk instead, the same 0.591 m (`trunk` in `RIDER_MODELS`), so the two bodies are one size whatever their hat or ears: the top of his head is at 1.70 m, 1.87 m with his beanie. Riding uses the unchanged procedural pose and two-bone IK. Walking uses AnimationMixer, with smooth speed weights between walk (1.4 m/s) and run (4 m/s). The 0.25 s mode transition blends from the outgoing complete bone pose; returning to riding restores all 65 bones before applying IK.
 
 Deck local X is length, Z width. Its runtime dimensions are 1.56 × 0.27 m; only the deck's width is compressed relative to uniform length scaling. Binding sets 2/3/6 and 1/4/7 are recentered on `rider.feet[0]` and `[1]` in body space, with uniform 1.2 binding scale and a thin sole offset below the boot datum. Existing orange bindings and procedural deck are hidden for this rider.
 

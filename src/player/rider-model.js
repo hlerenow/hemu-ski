@@ -7,6 +7,9 @@ import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { makeToon } from '../render/toon.js';
 import { THROW, ON_FOOT, sample, throwWeight } from './throw.js';
 
+// Size: by `trunk`, the Hips-to-Head joint length (metres), or else by
+// `height`, the whole model's. The male goes by his trunk, the same as the
+// female's 0.591 m, so the two bodies are one size whatever their hat or ears.
 // `seat`: how high the Hips bone sits above a seat's cushion (metres), for the
 // thighs' thickness. `outfits`: other sets of clothes, each a whole model on
 // the same Mixamo skeleton (Tripo can't take clothes off a model), sized to the
@@ -16,7 +19,7 @@ import { THROW, ON_FOOT, sample, throwWeight } from './throw.js';
 // rider whose walk and run clips this one borrows, retargeted to its own
 // skeleton (see retarget), for a model that came without them.
 export const RIDER_MODELS = {
-  male: { file: 'player.glb', height: 1.7, seat: 0.16, walkFrom: 'female' },
+  male: { file: 'player.glb', trunk: 0.591, seat: 0.18, walkFrom: 'female' },
   // Includes the cat ears: keep her body scale independent of the male's hat.
   female: {
     file: 'female-rider/female-rider-rigfix-walk-run-tex2k-v03.glb', height: 1.8, seat: 0.15,
@@ -91,7 +94,8 @@ export class RiderModel {
     this.root.updateMatrixWorld(true);
     this.trunk = byName.Head.getWorldPosition(_v).y - byName.Hips.getWorldPosition(_w).y;
     const box = new THREE.Box3().setFromObject(scene);
-    this.scale = fit ? (fit.scale * fit.trunk) / this.trunk : spec.height / (box.max.y - box.min.y);
+    this.scale = fit ? (fit.scale * fit.trunk) / this.trunk
+      : spec.trunk ? spec.trunk / this.trunk : spec.height / (box.max.y - box.min.y);
     this.root.scale.setScalar(this.scale);
     this.root.position.y = BOARD_TOP - box.min.y * this.scale;
     this.root.updateMatrixWorld(true);
