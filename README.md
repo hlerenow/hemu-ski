@@ -321,7 +321,12 @@ under `npm run dev` or Node:
   one for the summit (`/tools/review/summit.html`): its landmarks seen from
   cameras fitted to the four photos they were placed from, with each photo
   laid over (from the Cowart canvas in `canvas/`, where it's there) and the
-  arrows drawn on them marked, and from straight above.
+  arrows drawn on them marked, and from straight above. And one for the forest
+  (`/tools/review/forest.html`): fixed views along a run, over the treetops and
+  across the valley, each with its draw calls, triangles and CPU and GPU frame
+  times (`?only=forest` draws the forest alone).
+- `tools/trees/bake.mjs`: bakes the forest's trees from Cenji's winter pack
+  into `public/models/trees/trees.glb` (see the README there).
 - `tests/`: `npm test` checks the female rider's animation, the falls and
   front rolls (`tests/landing-recovery.mjs`).
 
@@ -346,8 +351,11 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
   hollow at a bank's foot and bright along its crest, which flat toon light
   wouldn't show.
 - The terrain is cut into tiles that are frustum-culled: 4 m within 300 m of
-  the camera (built as you come near), 8 m out to 1.2 km and 16 m beyond. Far
-  forest chunks are batched 4 × 4, and lift towers and cars are instanced.
+  the camera (built as you come near), 8 m out to 1.2 km and 16 m beyond. The
+  trees within ~450 m are one BatchedMesh, each at ~1,400 triangles inside
+  160 m and ~300 beyond; past that each is a tinted 12-triangle cone,
+  instanced per 250 m chunk, the far chunks batched 4 × 4. Lift towers and cars
+  are instanced.
 - `src/render/toon.js` adds three flat tones, a wobbly terminator, shadow
   hatching and snow-surface strokes to `MeshLambertMaterial`, so shadows,
   fog and instancing still work. On the runs it draws corduroy: ribs 18 cm
@@ -536,7 +544,11 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
   terrain-park features aren't there.
 - Forest cover is procedural, thinned to match the resort's 2023–24 trail map:
   open snowfields up high, scattered stands below a ~2,350 m treeline, cleared
-  along pistes, lift lines and around the lodges. Pistes are assumed to be
+  along pistes, lift lines and around the lodges. The species follow the Altai's
+  pattern, not a survey: bare Siberian larch on most slopes, spruce and fir
+  thick on north faces, stone pine up high, birch on the valley floor, and
+  sunny south faces mostly open. The trees are Cenji's low-poly winter pack,
+  repainted. Pistes are assumed to be
   about 34 m wide, all of them groomed, and the banks beside them are made up,
   not measured.
 - The two service centres are placed from OpenStreetMap (East) and the trail

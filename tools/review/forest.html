@@ -1,0 +1,17 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Forest review</title>
+<style>
+body{margin:0;background:#1d2428;font:13px system-ui;color:#23303a;overflow:hidden}
+canvas{position:absolute;left:0;top:0;width:100%;height:100%}
+nav{position:absolute;top:10px;left:10px;background:#fffe;padding:8px 10px;border-radius:8px;width:250px;z-index:2}
+nav button{font:inherit;margin:2px;padding:3px 8px}
+nav button.on{background:#23303a;color:#fff}
+output{display:block;white-space:pre-wrap;font:11px ui-monospace,monospace;margin-top:6px;color:#4a5661}
+body.clean nav{display:none}
+</style>
+<canvas id="game"></canvas>
+<nav>
+  <div id="views"></div>
+  <button id="bench">Measure all views</button>
+  <output id="status">Loading…</output>
+</nav>
+<script type="module" src="./forest-review.js"></script></html>

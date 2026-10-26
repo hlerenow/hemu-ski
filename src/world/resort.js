@@ -10,7 +10,7 @@ import { raiseBanks, gameClearings } from './banks.js';
 import { shapeSummit, createSummit } from './summit.js';
 import { shapeLakes, createLakes, overWater, mooring } from './lakes.js';
 import { createDetailTerrain } from './terrain.js';
-import { createForest, gameTrees, toyForest, GAME_FOREST } from './trees.js';
+import { createForest, gameTrees, toyForest, loadTreeModels, GAME_FOREST } from './trees.js';
 import { createLifts, createPisteMarkers, createBanner, createServiceCentre } from './props.js';
 import { createOnsen } from './onsen.js';
 import { Truck } from '../vehicle/truck.js';
@@ -29,15 +29,16 @@ export const MAIN_RUN = '云霄峰道'; // Yunxiaofeng, the run under Gondola No
 // shaped for its landmarks (summit.js) and Cloud Lake for its water (lakes.js).
 // Returns loadWorld()'s world plus `piste` (the runs' field, on the 4 m grid),
 // `ground` (the heightfield all of that made, which everything stands on),
-// `lakes` and `summitFrame` (where the summit is laid out from).
+// `lakes`, `summitFrame` (where the summit is laid out from) and `treeModels`
+// (the forest's baked trees, see loadTreeModels in trees.js).
 export async function loadResort({ original = false } = {}) {
-  const world = await loadWorld({ edits: !original });
+  const [world, treeModels] = await Promise.all([loadWorld({ edits: !original }), loadTreeModels()]);
   const { meta } = world;
   const piste = new PisteField(meta.runs, world.detail.size, 4, 60, world.detail.center);
   const ground = raiseBanks(world.detail, meta.runs, piste, gameClearings(meta.lifts));
   const summitFrame = shapeSummit(ground, meta.lifts);
   const lakes = shapeLakes(ground, meta.lakes);
-  return { ...world, piste, ground, lakes, summitFrame };
+  return { ...world, piste, ground, lakes, summitFrame, treeModels };
 }
 
 // The point `dist` metres along a line of [x, z] points, and the way it runs
@@ -88,7 +89,7 @@ function overlap(a, b) {
 // its model, still loading, and `park` (where it's parked); parkVehicle() gives
 // it its physics and puts it there, once the model is in.
 export function createResort(resort, { terrain: terrainOpts = {}, forest: forestOpts = {}, toy = null, labels = false } = {}) {
-  const { ground: hf, piste, meta, lakes, edits } = resort;
+  const { ground: hf, piste, meta, lakes, edits, treeModels } = resort;
   const group = new THREE.Group();
   const terrain = createDetailTerrain(hf, piste, TREELINE, terrainOpts);
   const lodges = SERVICE_CENTRES.map((c) => createServiceCentre(hf, c, { scale: toy?.lodge }));
@@ -106,7 +107,7 @@ export function createResort(resort, { terrain: terrainOpts = {}, forest: forest
   const trees = gameTrees(hf, piste, meta.lifts, edits?.trees);
   const forest = createForest(hf, toy
     ? toyForest(trees, hf, piste, meta.lifts, { scale: toy.tree, cell: toy.treeCell, per: toy.treePer, keepOff: [...buildings, ...props] })
-    : trees, forestOpts);
+    : trees, { models: treeModels, ...forestOpts });
   const water = createLakes(lakes);
   const markers = createPisteMarkers(hf, meta.runs);
   group.add(terrain, ...lodges, forest.group, lifts.group, summit.group, water.group, markers);
