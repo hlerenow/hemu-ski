@@ -9,7 +9,7 @@ Female total height is independently set to 1.8 m (including cat ears), male 1.7
 
 Deck local X is length, Z width. Its runtime dimensions are 1.56 × 0.27 m; only the deck's width is compressed relative to uniform length scaling. Binding sets 2/3/6 and 1/4/7 are recentered on `rider.feet[0]` and `[1]` in body space, with uniform 1.2 binding scale and a thin sole offset below the boot datum. Existing orange bindings and procedural deck are hidden for this rider.
 
-Play: `/?rider=female`, or choose Female rider under Outfit & gear. F toggles on foot when grounded; W walks, Shift runs, A/D turn, S stops. R resets to riding. Male/classic do not expose walking without clips.
+Play: `/?rider=female`, or choose Female rider under Outfit & gear. F toggles on foot when grounded; W walks, Shift runs, A/D turn, S stops. R resets to riding. The male rider (`player.glb`, which has no clips) borrows this walk and run through `walkFrom` in `RIDER_MODELS`, retargeted at load to his own bind pose (`retarget` in `src/player/rider-model.js`); classic does not walk.
 
 Dev inspection: `/tools/review/rider.html` uses the same Rider implementation, with ride/walk/run, head turn, camera and binding close-up controls. It is intentionally excluded from the production entry points. Browser verification screenshots are in `output/playwright/female-*.png`. User visual approval is separate from these checks.
 

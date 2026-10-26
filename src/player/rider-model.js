@@ -12,9 +12,11 @@ import { THROW, ON_FOOT, sample, throwWeight } from './throw.js';
 // the same Mixamo skeleton (Tripo can't take clothes off a model), sized to the
 // rider's own by the skeleton rather than by height; `seat` can differ there.
 // `clips`: the model's own clips by what they're for, each named by how its
-// name starts (Tripo cuts names off at 63 characters).
+// name starts (Tripo cuts names off at 63 characters). `walkFrom`: another
+// rider whose walk and run clips this one borrows, retargeted to its own
+// skeleton (see retarget), for a model that came without them.
 export const RIDER_MODELS = {
-  male: { file: 'player.glb', height: 1.7, seat: 0.16 },
+  male: { file: 'player.glb', height: 1.7, seat: 0.16, walkFrom: 'female' },
   // Includes the cat ears: keep her body scale independent of the male's hat.
   female: {
     file: 'female-rider/female-rider-rigfix-walk-run-tex2k-v03.glb', height: 1.8, seat: 0.15,
@@ -56,8 +58,9 @@ const _q = new THREE.Quaternion(), _r = new THREE.Quaternion(), _e = new THREE.E
 
 export class RiderModel {
   // `outfit` names one of RIDER_MODELS[id].outfits, sized to `fit`: the
-  // RiderModel of the rider's own clothes.
-  constructor(gltf, id = 'male', { outfit = null, fit = null } = {}) {
+  // RiderModel of the rider's own clothes. `borrow`: the loaded model of the
+  // rider's `walkFrom`, if it has one.
+  constructor(gltf, id = 'male', { outfit = null, fit = null, borrow = null } = {}) {
     const spec = RIDER_MODELS[id], wearing = outfit ? spec.outfits[outfit] : spec;
     const scene = clone(gltf.scene);
     scene.traverse((o) => {
@@ -100,8 +103,13 @@ export class RiderModel {
     this.animationScene = clone(gltf.scene);
     for (const entry of this.rest) entry.animated = this.animationScene.getObjectByName(entry.bone.name);
     this.mixer = new THREE.AnimationMixer(this.animationScene);
-    this.walk = gltf.animations.find((clip) => clip.name === 'walk.001');
-    this.run = gltf.animations.find((clip) => clip.name === 'run.001');
+    const own = (name) => gltf.animations.find((clip) => clip.name === name);
+    const borrowed = (name) => {
+      const clip = borrow?.animations.find((c) => c.name === name);
+      return clip && retarget(clip, borrow.scene, gltf.scene);
+    };
+    this.walk = own('walk.001') ?? borrowed('walk.001');
+    this.run = own('run.001') ?? borrowed('run.001');
     this.canWalk = !!(this.walk && this.run);
     if (this.canWalk) {
       this.walk = this.mixer.clipAction(this.walk).play();
@@ -543,4 +551,42 @@ function childDir(bone, root) {
   const a = root.worldToLocal(bone.getWorldPosition(new THREE.Vector3()));
   const b = root.worldToLocal(child.getWorldPosition(new THREE.Vector3()));
   return b.sub(a).normalize();
+}
+
+// `clip`, made on the skeleton in `from` (a scene at its bind pose), for the
+// same-named Mixamo bones in `to`. The rigs don't share their bind poses (the
+// right arm's bones are rolled up to 106° apart) or their bone lengths, so each
+// bone keeps the model-space turn it makes from its own bind pose, and only the
+// Hips move, by as much more or less as the hips stand higher or lower.
+// Scale tracks, and the other bones' position tracks, are left out.
+export function retarget(clip, from, to) {
+  from.updateMatrixWorld(true);
+  to.updateMatrixWorld(true);
+  const q = (o) => o.getWorldQuaternion(new THREE.Quaternion());
+  const hipsOf = (scene) => scene.getObjectByProperty('isBone', true);
+  const legs = hipsOf(to).getWorldPosition(new THREE.Vector3()).y / hipsOf(from).getWorldPosition(new THREE.Vector3()).y;
+  const tracks = [];
+  for (const track of clip.tracks) {
+    const { nodeName, propertyName } = THREE.PropertyBinding.parseTrackName(track.name);
+    const a = from.getObjectByName(nodeName), b = to.getObjectByName(nodeName);
+    if (!a?.isBone || !b?.isBone) continue;
+    const v = track.values.slice();
+    if (propertyName === 'quaternion') {
+      // Local key q becomes (B parent)⁻¹ (A parent) q A⁻¹ B, in bind orientations.
+      const left = q(b.parent).invert().multiply(q(a.parent));
+      const right = q(a).invert().multiply(q(b));
+      for (let i = 0; i < v.length; i += 4) {
+        _q.fromArray(v, i).premultiply(left).multiply(right).toArray(v, i);
+      }
+    } else if (propertyName === 'position' && a === hipsOf(from)) {
+      const restA = a.getWorldPosition(new THREE.Vector3()), restB = b.getWorldPosition(new THREE.Vector3());
+      const toLocal = b.parent.matrixWorld.clone().invert();
+      for (let i = 0; i < v.length; i += 3) {
+        _v.fromArray(v, i).applyMatrix4(a.parent.matrixWorld).sub(restA).multiplyScalar(legs).add(restB);
+        _v.applyMatrix4(toLocal).toArray(v, i);
+      }
+    } else continue;
+    tracks.push(new track.constructor(track.name, track.times.slice(), v, track.getInterpolation()));
+  }
+  return new THREE.AnimationClip(clip.name, clip.duration, tracks);
 }

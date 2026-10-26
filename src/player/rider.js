@@ -210,7 +210,11 @@ export class Rider {
     if (id !== 'classic') {
       if (!this.models.has(id)) {
         this.models.set(id, import('./rider-model.js')
-          .then(async ({ loadRiderModel, RiderModel }) => new RiderModel(await loadRiderModel(id), id))
+          .then(async ({ RIDER_MODELS, loadRiderModel, RiderModel }) => {
+            const from = RIDER_MODELS[id].walkFrom;
+            const [gltf, borrow] = await Promise.all([loadRiderModel(id), from && loadRiderModel(from)]);
+            return new RiderModel(gltf, id, { borrow });
+          })
           .catch((err) => { this.models.delete(id); throw err; }));
       }
       model = await this.models.get(id);
@@ -238,7 +242,8 @@ export class Rider {
     return this.model?.build ?? CLASSIC_BUILD;
   }
 
-  // Whether this rider walks and runs off the board (their own clothes carry the clips).
+  // Whether this rider walks and runs off the board (their own clothes carry the
+  // clips, or borrow them: see RIDER_MODELS' walkFrom).
   get canWalk() {
     return !!this.base?.canWalk;
   }

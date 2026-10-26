@@ -17,7 +17,7 @@ try {
   const { RiderModel } = await server.ssrLoadModule('/src/player/rider-model.js');
   // The GLB with its textures left out.
   async function load(file) {
-    const source = await readFile(new URL(`../public/models/female-rider/${file}`, import.meta.url));
+    const source = await readFile(new URL(`../public/models/${file.includes('/') ? file : `female-rider/${file}`}`, import.meta.url));
     const jsonLength = source.readUInt32LE(12);
     const json = JSON.parse(source.subarray(20, 20 + jsonLength));
     json.materials = (json.materials || []).map(() => ({ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] } }));
@@ -213,6 +213,29 @@ try {
   const sat = swim.heightIn(sitDown, sitDown.duration, 'LeftArm'), stood = swim.heightIn(sitDown, 0, 'LeftArm');
   assert(stood - sat > 0.6 && sat > 0.3, `shoulders ${stood.toFixed(2)} m standing, ${sat.toFixed(2)} m sat down`);
   console.log(`PASS fitting: steps up ${top.toFixed(2)} m; shoulders ${stood.toFixed(2)} m standing, ${sat.toFixed(2)} m sat down`);
+
+  // The male rider borrows her walk and run, retargeted to his own bind pose:
+  // each limb points the way hers does at the same moment, and the hips lift
+  // and dip by the same share of his height.
+  const maleGltf = await load('./player.glb');
+  const male = new RiderModel(maleGltf, 'male', { borrow: gltf });
+  assert.equal(male.canWalk, true, 'male rider must walk with the borrowed clips');
+  const her = new RiderModel(gltf, 'female');
+  const limbs = ['LeftUpLeg', 'LeftLeg', 'RightUpLeg', 'RightLeg', 'LeftArm', 'LeftForeArm', 'RightArm', 'RightForeArm', 'Spine1'];
+  const dirOf = (subject, name) => {
+    const bone = subject.root.getObjectByName(`mixamorig${name}`) ?? subject.root.getObjectByName(`mixamorig:${name}`);
+    const child = bone.children.find((c) => c.isBone);
+    return child.getWorldPosition(new THREE.Vector3()).sub(bone.getWorldPosition(new THREE.Vector3())).normalize();
+  };
+  for (const speed of [1.4, 4]) {
+    for (const subject of [male, her]) { frames('ride', 0, 1, subject); frames('walk', speed, 37, subject); subject.root.updateMatrixWorld(true); }
+    let worst = 0;
+    for (const name of limbs) worst = Math.max(worst, dirOf(male, name).angleTo(dirOf(her, name)));
+    const deg = THREE.MathUtils.radToDeg(worst);
+    assert(deg < 12, `male limbs follow hers at ${speed} m/s (worst ${deg.toFixed(1)}°)`);
+    console.log(`PASS male walks at ${speed} m/s: limbs within ${deg.toFixed(1)}° of hers`);
+  }
+
 } finally {
   await server.close();
 }
