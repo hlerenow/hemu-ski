@@ -11,6 +11,8 @@ import { SUMMIT } from './world/summit-layout.js';
 import { shoreAt, Ripples } from './world/lakes.js';
 import { PrayerWheels } from './world/prayer-wheels.js';
 import { Dog, DOG } from './dog/dog.js';
+import { Foxes, FOX, foxDen } from './fox/fox.js';
+import { find } from './collection.js';
 import { Npc } from './npc/npc.js';
 import { CAST } from './npc/cast.js';
 import { Dialogue } from './npc/dialogue.js';
@@ -1043,6 +1045,7 @@ function frame() {
   }
   onsen.update(dt, time, state === 'soak' && (!goingIn || goingIn.wet) ? rider.root.position : null);
   updateDog(dt);
+  updateFoxes(dt);
   updateWheels(dt);
   updateNpcs(dt);
   // The spout pouring into the pool, heard from 30 m off.
@@ -1062,7 +1065,7 @@ function frame() {
   updateWeatherPanel();
 
   // Normal-edge lines fade out by ~600 m, so far geometry can skip that pass.
-  post.render(scene, camera, time, [sky, weather.snowfall.points, spray.points, dog.spray.points, specks.points, backdrop, ripples.group, ...forest.farMeshes, ...marks.hidden]);
+  post.render(scene, camera, time, [sky, weather.snowfall.points, spray.points, dog.spray.points, ...(foxes ? [foxes.spray.points] : []), specks.points, backdrop, ripples.group, ...forest.farMeshes, ...marks.hidden]);
   requestAnimationFrame(frame);
 }
 
@@ -1325,6 +1328,25 @@ function petDog() {
   dog.pet(forDog());
   petT = 2.2;
 }
+// ---------- The red foxes ----------
+// A skulk of two or three by No. 6's bottom station in Jingquan Valley, an
+// Easter egg (see src/fox/fox.js). They watch you from a safe way off, shy
+// off if you come too near and bolt if you ski at them. The first time one
+// gets a good look at you, it's found.
+const den = foxDen(meta.lifts);
+const foxes = den && new Foxes({ hf: detail, forest, obstacles: phys.obstacles, den });
+if (foxes) {
+  scene.add(foxes.root, foxes.spray.points);
+  foxes.ready.catch((err) => console.warn('The foxes failed to load; they stay out of the game.', err));
+}
+function updateFoxes(dt) {
+  if (!foxes) return;
+  const who = forDog();
+  if (who) who.turn = phys.yawRate;
+  foxes.update(dt, time, who, camera);
+  for (const ev of foxes.events.splice(0)) if (ev.type === 'found' && find(FOX.id)) hud.toast(`Found: ${FOX.zh} · ${FOX.en}`, 3000);
+}
+
 // ---------- NPCs ----------
 // The cast (npc/cast.js), each sat in the room of their landmark: walking in
 // (on foot or on the board), they look up at you and start talking. Leaving
@@ -2031,5 +2053,5 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { npcs, dialogue, phys, rider, camera, mouseLook, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { npcs, dialogue, phys, rider, camera, mouseLook, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, foxes, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
 requestAnimationFrame(frame);

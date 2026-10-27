@@ -165,6 +165,20 @@ when it's gone, and coming back to you. Take a fall nearby and it runs over
 to check you're all right. You hear it bark and whine, and pant after a run.
 On a touch screen the button says **Pet**, or **Throw** when it's near.
 
+Down in Jingquan Valley (静泉谷), beside the run about 50 m above Cable Car
+No. 6's bottom station, three red foxes (赤狐) make a small Easter egg. They
+potter about, nose in the snow, ears flicking, and curl up asleep after a
+while. They notice you from about 22 m. While you're moving they keep their
+distance, 5–8 m off, sitting to watch and now and then stretching into a play
+bow and shaking off the snow; stand still and they come right up, a couple of
+metres in front of you to either side, close enough to see their ears and
+their blinks. Walk at one and it starts and trots away, then creeps back low,
+loses its nerve and settles further off. Ski at
+them and they bolt off your line, cutting back as you close in, and look back
+once you've gone by. The first time one gets a good look at you, it's found:
+the game says so once and keeps a note of it in this browser
+(`hemu-ski.found`), the start of a collection.
+
 A menu rail on the left edge links to the diorama, takes you back to the start
 (R), picks your rider (**Rider**:
 male, female or the classic one; the female rider can also walk and run off the

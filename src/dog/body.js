@@ -59,6 +59,7 @@ export class DogBody {
     this.phase = 0;
     this.gait = 0; // 0 walk … 1 trot … 2 gallop
     this.stride = 0; // how far into a stride the legs are (0 standing still … 1 striding)
+    this.cadence = 1; // steps quicker (> 1) or slower than the sheepdog's at a speed
 
     // What plays over the top, set by Dog.
     this.look = Z.clone(); // where the muzzle points (model frame), eased toward `lookAt`
@@ -112,9 +113,14 @@ export class DogBody {
     this.#rear(this.frames.rear);
     const F = this.#blend();
     this.#overlay(F, dt);
+    this.adjust(F, dt);
     this.#toPose(F, ground);
     this.rig.pose(this.P);
   }
+
+  // For another animal on the same body (the fox's FoxBody): changes to the
+  // blended frame `F` after the overlays, before it becomes the rig's pose.
+  adjust(F, dt) {}
 
   // ---- Gait ----
   // The stride's timing follows how fast the legs have to go: walking, then
@@ -126,7 +132,7 @@ export class DogBody {
     const want = smoothstep(u, 1.2, 1.7) + smoothstep(u, 4.0, 5.0);
     this.gait += (want - this.gait) * (1 - Math.exp(-dt * 4));
     this.stride += ((u > 0.08 ? 1 : 0) - this.stride) * (1 - Math.exp(-dt * (u > 0.08 ? 10 : 6)));
-    this.hz = clamp(1.45 + u * 0.5, 1.45, 3.3);
+    this.hz = clamp(1.45 + u * 0.5, 1.45, 3.3) * this.cadence;
     if (this.stride > 0.01) this.phase = mod(this.phase + this.hz * dt, 1);
     else this.phase = 0;
   }

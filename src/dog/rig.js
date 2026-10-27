@@ -33,7 +33,7 @@ const SPINE = ['spine', 'spine1', 'spine2', 'chest'];
 // much of what's left of it.
 const NECK = [['neck', 0.3], ['neck1', 0.45], ['head', 1]];
 const TAIL = ['tail', 'tail1', 'tail2', 'tail3'];
-const TONGUE = ['tongue', 'tongue1', 'tongue2'];
+const EARS = [['ear_L', 1], ['ear_R', -1]];
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
 const _q = new THREE.Quaternion(), _r = new THREE.Quaternion(), _s = new THREE.Quaternion(), _e = new THREE.Euler();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
@@ -48,6 +48,9 @@ const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3
 //   jaw: radians open; tongue: 0 in, 1 lolling out
 //   tail: { lift, wag: [4 radians], curl }  raised from hanging; swung side
 //                          to side, root to tip
+//   ears: [left, right] × { back, swivel, flat }, or null: radians tipped
+//                          back, the opening turned out, laid out sideways
+//                          (only a rig with ear bones, as the fox's, has them)
 //   legs: [4 × { paw, pastern, toe }]  where each paw's ball goes, and the
 //                          way its pastern (or hock) and paw point
 export function restPose(rig) {
@@ -60,6 +63,7 @@ export function restPose(rig) {
     jaw: 0,
     tongue: 0,
     tail: { lift: 0, wag: [0, 0, 0, 0], curl: 0 },
+    ears: rig.bones.ear_L ? EARS.map(() => ({ back: 0, swivel: 0, flat: 0 })) : null,
     legs: r.legs.map((l) => ({ paw: l.paw.clone(), pastern: l.pastern.clone(), toe: l.toe.clone() })),
   };
 }
@@ -120,7 +124,7 @@ export class DogRig {
     this.ref = {
       hips: at('hips'),
       head: at('head'),
-      jaw: at('jaw'),
+      jaw: B.jaw ? at('jaw') : null, // the fox has none
       chest: at('chest'),
       legs: this.legs.map(({ bones: [A, , C, D], side, front }) => ({
         side, front, socket: at(A.name), paw: at(D.name), pastern: dir(C.name), toe: dir(D.name),
@@ -163,10 +167,25 @@ export class DogRig {
       this.#rotate(B.head, _q.setFromAxisAngle(look, roll));
     }
 
+    // Ears (a fox's; the dog's hang in its fur): each tipped back, turned
+    // about its own length so the opening faces out, and laid out sideways,
+    // all from rest in the head's frame.
+    if (P.ears) {
+      EARS.forEach(([n, side], i) => {
+        const e = P.ears[i], b = B[n];
+        const along = _a.copy(Y).applyQuaternion(b.userData.rest.mq);
+        _q.setFromAxisAngle(X, -e.back)
+          .multiply(_r.setFromAxisAngle(Z, -e.flat * side))
+          .multiply(_s.setFromAxisAngle(along, e.swivel * side));
+        this.#turn(b, _q);
+        this.#fk(b.userData.i, b.userData.end);
+      });
+    }
+
     // Mouth and tongue: the jaw drops about its hinge; the tongue slides out
     // over the lower teeth and droops.
-    this.#turn(B.jaw, _q.setFromAxisAngle(X, P.jaw));
-    if (P.tongue > 0) {
+    if (B.jaw) this.#turn(B.jaw, _q.setFromAxisAngle(X, P.jaw));
+    if (P.tongue > 0 && B.tongue) {
       const t = P.tongue;
       B.tongue.position.y += 0.03 * t; // along the jaw, out of the mouth
       B.tongue.position.z -= 0.006 * t;
@@ -174,7 +193,7 @@ export class DogRig {
       this.#turn(B.tongue1, _q.setFromAxisAngle(X, 0.5 * t));
       this.#turn(B.tongue2, _q.setFromAxisAngle(X, 0.6 * t));
     }
-    this.#fk(B.jaw.userData.i, B.jaw.userData.end);
+    if (B.jaw) this.#fk(B.jaw.userData.i, B.jaw.userData.end);
 
     // The tail: raised from hanging (most at the root), curled toward the tip,
     // then each bone swung across the body.
