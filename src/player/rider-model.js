@@ -33,6 +33,12 @@ export const RIDER_MODELS = {
     },
   },
 };
+// The scale for a rider's own clothes, from its `trunk` (Hips to Head joint)
+// and bounding `box` in model units: by `spec.trunk` if it has one, else by
+// `spec.height`. The NPCs (npc/npc.js) are sized by it too.
+export function riderScale(spec, trunk, box) {
+  return spec.trunk ? spec.trunk / trunk : spec.height / (box.max.y - box.min.y);
+}
 const BOARD_TOP = 0.025;
 const FADE = 0.25;
 const loading = new Map();
@@ -94,8 +100,7 @@ export class RiderModel {
     this.root.updateMatrixWorld(true);
     this.trunk = byName.Head.getWorldPosition(_v).y - byName.Hips.getWorldPosition(_w).y;
     const box = new THREE.Box3().setFromObject(scene);
-    this.scale = fit ? (fit.scale * fit.trunk) / this.trunk
-      : spec.trunk ? spec.trunk / this.trunk : spec.height / (box.max.y - box.min.y);
+    this.scale = fit ? (fit.scale * fit.trunk) / this.trunk : riderScale(spec, this.trunk, box);
     this.root.scale.setScalar(this.scale);
     this.root.position.y = BOARD_TOP - box.min.y * this.scale;
     this.root.updateMatrixWorld(true);

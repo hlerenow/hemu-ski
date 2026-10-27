@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { makeToon } from '../render/toon.js';
-import { RIDER_MODELS, loadRiderModel } from '../player/rider-model.js';
+import { RIDER_MODELS, loadRiderModel, riderScale } from '../player/rider-model.js';
 
 // How each pose places the joints (body frame, metres, heights over the
 // cushion or mat they sit on).
@@ -77,15 +77,18 @@ export class Npc {
       o.castShadow = o.receiveShadow = true;
       o.frustumCulled = false; // the bind pose's bounds don't follow the pose
     });
-    const box = new THREE.Box3().setFromObject(scene), S = RIDER_MODELS[this.spec.rider].height / (box.max.y - box.min.y);
+    // Sized as the rider is (by the trunk, or else the height).
+    const bones = {};
+    scene.traverse((o) => { if (o.isBone) bones[o.name.replace(/^mixamorig:?/, '')] = o; });
+    scene.updateMatrixWorld(true);
+    const trunk = bones.Head.getWorldPosition(_v).y - bones.Hips.getWorldPosition(_w).y;
+    const box = new THREE.Box3().setFromObject(scene), S = riderScale(RIDER_MODELS[this.spec.rider], trunk, box);
     scene.scale.setScalar(S);
     scene.position.y = -box.min.y * S;
     // Posed on its own, so world space is the body frame.
     const body = new THREE.Group();
     body.add(scene);
     body.updateMatrixWorld(true);
-    const bones = {};
-    scene.traverse((o) => { if (o.isBone) bones[o.name.replace(/^mixamorig:?/, '')] = o; });
     this.#pose(bones, POSES[this.spec.pose]);
     this.root.add(body);
   }
