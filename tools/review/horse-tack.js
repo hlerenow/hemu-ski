@@ -1,8 +1,9 @@
 // Tack for the horse review (tools/review/horse.html): the Kazakh saddle with
-// its felt cloth (public/models/saddle/), placeholder stirrups on straps and
+// its felt cloth (public/models/saddle/), brass stirrup irons on leathers,
 // reins from the bit to the rider's hands, and the `seat` a rider sits on
-// through Rider.setLocomotion('sit'). Only the saddle is a finished model; the
-// rest are stand-ins until the stirrup irons and bridle are made.
+// through Rider.setLocomotion('sit'). The saddle is a model; the irons are
+// built here, after the stirrup drawn with the saddle's first design sheet;
+// the reins are stand-ins until the bridle is made.
 //
 // Model frame (the GLB's units): +z forward, +x the horse's left, +y up,
 // hooves at y = 0. The saddle GLB is in the same frame and units, fitted to
@@ -12,6 +13,7 @@
 // snowmobile's is, since the rider's body frame matches the vehicle's.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { makeToon } from '../../src/render/toon.js';
 
 const SADDLE_FILE = import.meta.env.BASE_URL + 'models/saddle/kazakh-saddle.glb';
@@ -87,6 +89,67 @@ export function backProfile(positions) {
   return { at, point, depth };
 }
 
+// A stirrup iron, in metres, standing on the ground at y = 0, its opening
+// facing ±z, after the stirrup drawn with the saddle's first design sheet: a
+// brass loop whose sides rise nearly straight, then curve in to a rounded top;
+// its bars flat bands, as deep as the tread at the foot and tapering up the
+// sides; a dark leather pad on the tread. Sized round the riders' snow boots.
+export const IRON = { width: 0.27, height: 0.27, top: 0.16, bar: 0.022, tread: 0.024, depth: 0.12, taper: 0.4, pad: 0.008 };
+// A closed path through the corners `pts`, each rounded off over `radii`
+// (at most about half of each edge beside it).
+function roundedPath(path, pts, radii) {
+  const n = pts.length;
+  const at = (a, b, r) => { const d = Math.hypot(b[0] - a[0], b[1] - a[1]); return [a[0] + ((b[0] - a[0]) * r) / d, a[1] + ((b[1] - a[1]) * r) / d]; };
+  const len = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+  pts.forEach((p, i) => {
+    const prev = pts[(i + n - 1) % n], next = pts[(i + 1) % n];
+    const r = Math.min(radii[i], 0.48 * len(p, prev), 0.48 * len(p, next));
+    const a = at(p, prev, r), b = at(p, next, r);
+    if (i === 0) path.moveTo(...a); else path.lineTo(...a);
+    path.quadraticCurveTo(p[0], p[1], ...b);
+  });
+  path.closePath();
+  return path;
+}
+// A convex polygon (counter-clockwise) with each edge moved in by its distance.
+function inset(pts, dist) {
+  const n = pts.length, lines = pts.map((p, i) => {
+    const q = pts[(i + 1) % n], dx = q[0] - p[0], dy = q[1] - p[1], len = Math.hypot(dx, dy);
+    const nx = -dy / len, ny = dx / len; // inward, for counter-clockwise
+    return [p[0] + nx * dist[i], p[1] + ny * dist[i], dx, dy];
+  });
+  return lines.map((l, i) => {
+    const [x1, y1, dx1, dy1] = lines[(i + n - 1) % n], [x2, y2, dx2, dy2] = l;
+    const t = ((x2 - x1) * dy2 - (y2 - y1) * dx2) / (dx1 * dy2 - dy1 * dx2);
+    return [x1 + dx1 * t, y1 + dy1 * t];
+  });
+}
+export function stirrupIron(brass, pad) {
+  const { width: W, height: H, top: T, bar: t, tread, depth: D, taper, pad: P } = IRON;
+  // Bottom corners, the shoulders where the sides start to curve in, the top.
+  const outer = [[-W / 2, 0], [W / 2, 0], [W / 2 - 0.012, H * 0.6], [T / 2, H], [-T / 2, H], [-W / 2 + 0.012, H * 0.6]];
+  const inner = inset(outer, [tread, t, t, t, t, t]);
+  const shape = roundedPath(new THREE.Shape(), outer, [0.02, 0.02, 0.12, 0.06, 0.06, 0.12]);
+  shape.holes.push(roundedPath(new THREE.Path(), inner, [0.01, 0.01, 0.11, 0.045, 0.045, 0.11]));
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: D, bevelEnabled: true, bevelSize: 0.004, bevelThickness: 0.004, bevelSegments: 2, curveSegments: 10 });
+  geo.translate(0, 0, -D / 2);
+  // Deep at the tread, the band narrowing up the sides to `taper` of that.
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const k = THREE.MathUtils.smoothstep(pos.getY(i), tread, H * 0.85);
+    pos.setZ(i, pos.getZ(i) * (1 - (1 - taper) * k));
+  }
+  geo.computeVertexNormals();
+  const g = new THREE.Group();
+  const loop = new THREE.Mesh(geo, brass);
+  const mat = new THREE.Mesh(new RoundedBoxGeometry(inner[1][0] - inner[0][0] - 0.01, P * 2, D - 0.012, 2, P * 0.9), pad);
+  mat.position.y = tread;
+  for (const m of [loop, mat]) { m.castShadow = true; g.add(m); }
+  return g;
+}
+// The sole stands on the pad.
+export const TREAD_TOP = IRON.tread + IRON.pad;
+
 // A box placed between two points each frame: straps.
 class Strap {
   constructor(parent, width, thick, material) {
@@ -126,8 +189,9 @@ export class Tack {
     this.toModel = inModel.clone().invert();
     const onBack = (o) => { o.matrixAutoUpdate = false; o.matrix.copy(this.toModel); back.add(o); return o; };
 
-    const leather = makeToon({ color: '#6b3f22', side: THREE.DoubleSide }, { rim: 0.8, hatch: 0 });
-    const iron = makeToon({ color: '#3a3a3e' }, { rim: 1, hatch: 0 });
+    const leather = makeToon({ color: '#7a4a2a', side: THREE.DoubleSide }, { rim: 0.8, hatch: 0 });
+    const brass = makeToon({ color: '#c9a24e' }, { rim: 1, hatch: 0 });
+    const padding = makeToon({ color: '#4a3326' }, { rim: 0.4, hatch: 0 });
     const rein = makeToon({ color: '#3b2414' }, { rim: 0.6, hatch: 0 });
     // The saddle, bound to the horse's own skeleton beside its mesh: its
     // joints renumbered from its copy of the armature to the horse's by name.
@@ -176,14 +240,16 @@ export class Tack {
     // Stirrups and their straps hang in metres, in a frame that follows the
     // back but not the model's scale.
     this.metres = onBack(new THREE.Group());
-    this.straps = [0, 1].map(() => new Strap(this.metres, 0.05, 0.012, leather));
+    this.straps = [0, 1].map(() => new Strap(this.metres, 0.045, 0.012, leather));
+    // Each iron turned as the boot in it is, toes out (degrees, the horse's
+    // left iron first), the leather looped round its top bar.
+    this.toeOut = 15;
     this.irons = [0, 1].map(() => {
-      const g = new THREE.Group();
-      const box = (w, h, d, x, y) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), iron); m.position.set(x, y, 0); m.castShadow = true; g.add(m); };
-      box(0.14, 0.02, 0.08, 0, -0.01); // the tread, under the ball of the boot
-      box(0.016, 0.15, 0.03, 0.07, 0.075);
-      box(0.016, 0.15, 0.03, -0.07, 0.075);
-      box(0.156, 0.016, 0.03, 0, 0.15);
+      const g = stirrupIron(brass, padding);
+      const loop = new THREE.Mesh(new RoundedBoxGeometry(0.052, 0.07, 0.036, 2, 0.014), leather);
+      loop.position.y = IRON.height - IRON.bar / 2 + 0.012;
+      loop.castShadow = true;
+      g.add(loop);
       this.metres.add(g);
       return g;
     });
@@ -219,9 +285,10 @@ export class Tack {
     s.feet.forEach((foot, i) => {
       const top = _b.copy(this.strapTop(foot.z / scale, i ? -1 : 1)).multiplyScalar(scale);
       // The rigged rider's sole sits a board's thickness under the foot's spot
-      // (RiderModel's BOARD_TOP): the tread goes there.
-      this.irons[i].position.copy(foot).y -= 0.025;
-      this.straps[i].set(top, _a.copy(this.irons[i].position).add(_d.set(0, 0.158, 0)));
+      // (RiderModel's BOARD_TOP): the pad's top goes there.
+      this.irons[i].position.copy(foot).y -= 0.025 + TREAD_TOP;
+      this.irons[i].rotation.y = THREE.MathUtils.degToRad(i ? -this.toeOut : this.toeOut);
+      this.straps[i].set(top, _a.copy(this.irons[i].position).add(_d.set(0, IRON.height + 0.02, 0)));
     });
     return s;
   }
