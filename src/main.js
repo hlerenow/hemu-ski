@@ -1,3 +1,4 @@
+import { setLoadingProgress, setLoadingArrival, finishLoading } from './loading.js';
 import * as THREE from 'three';
 import { SERVICE_CENTRES, PISTE_HALF_WIDTH, ONSEN } from './world/data.js';
 import { loadResort, createResort, along, MAIN_RUN, TREELINE } from './world/resort.js';
@@ -67,6 +68,9 @@ function resize() {
   renderer.setSize(w, h, false);
   post.setSize(w, h, pr);
   toonUniforms.uPixelRatio.value = pr;
+  // A phone-sized view keeps only the corduroy right in front of you; further
+  // off, the ribs, sharp as they are, become a field of fine stripes there.
+  toonUniforms.uRibScale.value = Math.min(w, h) < 600 ? 12 : 1;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -76,11 +80,12 @@ resize();
 // ---------- World ----------
 // Sent from the diorama, the loading screen says where to.
 const arrivalNote = takeArrivalNote();
-if (arrivalNote) document.querySelector('#loading > :last-child').textContent = arrivalNote;
+if (arrivalNote) setLoadingArrival(arrivalNote);
 // The game's world (see world/resort.js, which the diorama builds from too):
 // the map editor's saved edits apply unless the URL says ?original.
-const resort = await loadResort({ original: new URLSearchParams(location.search).has('original') });
-await document.fonts.load('40px "Patrick Hand SC"').catch(() => {});
+const resort = await loadResort({ original: new URLSearchParams(location.search).has('original'), onProgress: (p) => setLoadingProgress(p * 0.75) });
+await Promise.all([document.fonts.load('40px "Patrick Hand SC"'), document.fonts.load('20px "Patrick Hand"')]).catch(() => {});
+setLoadingProgress(0.875);
 const { meta, piste, lakes } = resort;
 // The ground everything stands on: the snow banked up beside the runs, the
 // summit and Cloud Lake shaped.
@@ -161,6 +166,12 @@ scene.add(trail.mesh, spray.points, powderSpray.points, collar.mesh);
 let sink = 0; // how far the board rides down in the powder (see Powder, below)
 const hud = new Hud(resort, piste, lakes);
 const sound = new Sound();
+sound.listen();
+// Coming back to the tab (or back from the diorama, with the page kept) tries
+// to revive the audio the browser suspended while the page was hidden; where
+// that needs a gesture, the next tap or key does it (see Sound.listen).
+document.addEventListener('visibilitychange', () => { if (!document.hidden) sound.resume(); });
+window.addEventListener('pageshow', () => sound.resume());
 const menu = createMenu(sound);
 // The GPS: pick a destination on the big map and it routes you there.
 const gps = new Navigator({ hf: detail, runs: meta.runs, rides });
@@ -251,6 +262,9 @@ const keys = new Set();
 const isControl = (target) => target instanceof Element
   && !!target.closest('input, select, textarea, button, a, [contenteditable="true"]');
 window.addEventListener('keydown', (e) => {
+  // Cmd+key is the browser's or the OS's (Cmd+F finds, Cmd+M minimises), not
+  // the rider's, as in the diorama; its keyup may never come anyway.
+  if (e.metaKey) return;
   // The big map takes the keys while it's open; Escape or M closes it.
   if (bigMap.isOpen) {
     if ((e.code === 'Escape' || e.code === 'KeyM') && !e.repeat) closeMap();
@@ -270,7 +284,7 @@ function act(code, repeat = false) {
   if ((code === 'Enter' || code === 'Space') && state === 'title') { begin(); return; }
   if ((code === 'Enter' || code === 'Space' || code === 'Escape') && state === 'swoop') { swoop.t = 1; return; }
   if ((code === 'Enter' || code === 'Space' || code === 'Escape') && state === 'arrive') { arrival.t = 1; return; }
-  if (code === 'KeyR' && state === 'ride') startRun();
+  if (code === 'KeyR' && !repeat && state === 'ride') startRun();
   if (code === 'KeyR' && !repeat && state === 'drive') carHome();
   if (code === 'KeyF' && !repeat && state === 'ride') toggleLocomotion();
   if (code === 'KeyM' && !repeat) openMap();
@@ -293,8 +307,15 @@ function act(code, repeat = false) {
 }
 const pressE = () => { sound.start(); act('KeyE'); }; // a tapped prompt
 const pressQ = () => { sound.start(); act('KeyQ'); };
-window.addEventListener('keyup', (e) => keys.delete(e.code));
+window.addEventListener('keyup', (e) => {
+  // macOS drops other keys' keyups while Cmd is down, so letting go of Cmd
+  // lets go of everything; otherwise a W released mid-shortcut rides on alone
+  // (the same fix the diorama's fly keys already have, diorama/main.js).
+  if (e.key === 'Meta') keys.clear();
+  else keys.delete(e.code);
+});
 window.addEventListener('blur', () => keys.clear());
+document.addEventListener('visibilitychange', () => { if (document.hidden) keys.clear(); });
 window.addEventListener('focusin', (e) => { if (isControl(e.target)) keys.clear(); });
 // A tap skips the flight down from the title and the drop out of the cloud, as Space does.
 canvas.addEventListener('pointerdown', () => {
@@ -896,7 +917,6 @@ const clock = new THREE.Clock();
 let acc = 0, time = 0;
 const STEP = 1 / 120;
 const _side = new THREE.Vector3(), _tail = new THREE.Vector3(), _sv = new THREE.Vector3();
-document.getElementById('loading').classList.add('done');
 
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -2085,10 +2105,11 @@ function arrive(dest, at = dest) {
   camDir.set(at.dx, 0, at.dz);
   const end = new THREE.Vector3(), look = new THREE.Vector3();
   cameraTarget(end, look);
-  const from = end.clone().addScaledVector(camDir, -260);
-  from.y += 380;
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const from = end.clone();
+  if (!reducedMotion) { from.addScaledVector(camDir, -260); from.y += 380; }
   // A beat in the cloud first while the loading screen fades.
-  arrival = { t: -0.25, dur: 2.8, end, look, from, at };
+  arrival = { t: -0.25, dur: reducedMotion ? 0.65 : 2.8, end, look, from, at };
   setCloud(1);
   updateArrival(0);
 }
@@ -2172,7 +2193,7 @@ function leaveFor(href, note) {
   leaving = { t: 0, href };
 }
 function updateLeaving(dt) {
-  leaving.t = Math.min(1, leaving.t + dt / 0.7);
+  leaving.t = Math.min(1, leaving.t + dt / (matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.45 : 0.7));
   setCloud(THREE.MathUtils.smoothstep(leaving.t, 0, 1));
   if (leaving.t >= 1) {
     closeMap(); // back from the diorama, you ride on
@@ -2225,4 +2246,5 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 // Handy for poking at things from the console.
 const debug = { cam: null };
 window.__game = { npcs, dialogue, phys, rider, camera, mouseLook, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, foxes, horse, mountHorse, getOffHorse, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+await finishLoading();
 requestAnimationFrame(frame);

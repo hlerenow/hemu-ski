@@ -9,6 +9,10 @@ export const toonUniforms = {
   uShadowTint: { value: new THREE.Color('#9fc4cc') },
   uSunIntensity: { value: 3.0 },
   uPixelRatio: { value: 1 },
+  // How many times coarser on screen the corduroy has to be before it's drawn:
+  // 1 on a big screen, more on a phone, where the same ribs a few pixels apart
+  // are a fraction of a millimetre and read as a field of fine stripes.
+  uRibScale: { value: 1 },
 };
 
 const NOISE_GLSL = /* glsl */ `
@@ -97,6 +101,7 @@ export function makeToon(params = {}, opts = {}) {
         uniform vec3 uShadowTint;
         uniform float uSunIntensity;
         uniform float uPixelRatio;
+        uniform float uRibScale;
         uniform float uHatch;
         uniform float uRim;
         uniform float uSnow;
@@ -114,7 +119,10 @@ export function makeToon(params = {}, opts = {}) {
             // flecks, faded out with distance so it never shimmers.
             vec2 w = vTWorld.xz;
             float near = 1.0 - smoothstep(60.0, 260.0, length(vViewPosition));
-            float drift = tNoise(w * 0.045) * 0.6 + tNoise(w * 0.18) * 0.4;
+            // The fine octave is metres across up close but finer than a
+            // pixel further off (phones sooner: no AA, capped pixel ratio),
+            // where it stops reading as drifts and turns into striping.
+            float drift = tNoise(w * 0.045) * 0.6 + tNoise(w * 0.18) * 0.4 * mix(0.25, 1.0, near);
             base *= 1.0 - drift * 0.05;
             vec2 sw = vec2(w.x * 0.9 + w.y * 0.4, w.y * 0.25 - w.x * 0.1);
             float stroke = smoothstep(0.66, 0.7, tNoise(sw * 1.3)) * smoothstep(0.35, 0.6, tNoise(w * 0.07 + 7.0));
@@ -130,10 +138,10 @@ export function makeToon(params = {}, opts = {}) {
               float o = vPiste.x + (tNoise(vec2(along * 0.008, 1.7)) - 0.5) * 1.2; // the groomer wanders
               float m = smoothstep(0.35, 0.65, vPiste.z + (tNoise(vec2(along * 0.25, o * 0.6)) - 0.5) * 0.35);
               float rib = o / 0.18;
-              float ribs = (0.5 + 0.5 * cos(rib * 6.2831853)) * (1.0 - smoothstep(0.3, 0.7, fwidth(rib)));
+              float ribs = (0.5 + 0.5 * cos(rib * 6.2831853)) * (1.0 - smoothstep(0.3, 0.7, fwidth(rib) * uRibScale));
               float lane = o / 4.4;
               float seamD = min(fract(lane), 1.0 - fract(lane)) * 4.4;
-              float seam = (1.0 - smoothstep(0.04, 0.16, seamD)) * (1.0 - smoothstep(0.08, 0.3, fwidth(o)));
+              float seam = (1.0 - smoothstep(0.04, 0.16, seamD)) * (1.0 - smoothstep(0.08, 0.3, fwidth(o) * uRibScale));
               float worn = smoothstep(0.45, 0.8, tNoise(vec2(along * 0.035, o * 0.12) + floor(lane) * 1.31));
               base *= 1.0 - m * (ribs * 0.1 * (1.0 - worn * 0.85) + seam * 0.09);
               groomed = m;
@@ -145,9 +153,16 @@ export function makeToon(params = {}, opts = {}) {
           float direct = dot(reflectedLight.directDiffuse, vec3(0.299, 0.587, 0.114)) / lum;
           direct *= PI / uSunIntensity;            // ~ N.L * shadow, 0..1
           // Wobble the terminator a little so it reads as painted, not computed.
-          float wob = (tNoise(vTWorld.xz * 0.35 + vTWorld.y * 0.2) - 0.5) * 0.08;
-          float lit = smoothstep(0.24 + wob, 0.30 + wob, direct);
-          float full = smoothstep(0.55 + wob, 0.6 + wob, direct);
+          // The wobble's noise is ~3 m across: once that is finer than a pixel
+          // it aliases into thin stripes crawling over the snow (the far
+          // mountains already guard against this — see mountain-material.js),
+          // so fade it out as it reaches pixel size, and widen both steps by
+          // a pixel of direct light so the edge itself can never alias either.
+          float wob = (tNoise(vTWorld.xz * 0.35 + vTWorld.y * 0.2) - 0.5) * 0.08
+            * (1.0 - smoothstep(0.15, 0.35, length(fwidth(vTWorld.xz * 0.35))));
+          float dw = fwidth(direct);
+          float lit = smoothstep(0.24 + wob - dw, 0.30 + wob + dw, direct);
+          float full = smoothstep(0.55 + wob - dw, 0.6 + wob + dw, direct);
           // Three flat tones: shadow, mid (turning away from the sun), lit.
           vec3 col = mix(base * uShadowTint, base * mix(uShadowTint, uLitTint, 0.68), lit);
           col = mix(col, base * uLitTint, full);
@@ -157,6 +172,10 @@ export function makeToon(params = {}, opts = {}) {
           float stripe = abs(fract((sc.x + sc.y) / 7.0) - 0.5);
           float line = 1.0 - smoothstep(0.06, 0.13, stripe);
           float patchy = smoothstep(0.45, 0.7, tNoise(vTWorld.xz * 0.08 + vTWorld.y * 0.05));
+          // The patch mask is world-space noise: far off it goes sub-pixel and
+          // the strokes break into moiré striping, so settle it to a plain
+          // half-strength mask with distance instead.
+          patchy = mix(0.5, patchy, 1.0 - smoothstep(60.0, 260.0, length(vViewPosition)));
           col *= 1.0 - line * patchy * (1.0 - lit) * 0.16 * uHatch;
 
           // Optional pale rim on the lit side for characters.

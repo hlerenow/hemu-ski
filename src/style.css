@@ -1,3 +1,40 @@
+/* The handwriting fonts ship with the game (src/fonts/, OFL) instead of
+   coming from Google Fonts: the CDN copy loaded only when the network
+   reached Google in time, so on phones every visit could fall back to a
+   different local cursive and the text visibly changed from load to load. */
+@font-face {
+  font-family: 'Patrick Hand';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/patrick-hand-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Patrick Hand';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/patrick-hand-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Patrick Hand SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/patrick-hand-sc-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Patrick Hand SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/patrick-hand-sc-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 :root {
   --ink: #23303a;
   --paper: #fbfaf5;
@@ -156,9 +193,14 @@ body {
   position: absolute; top: 22%; left: 50%; transform: translateX(-50%);
   font-family: 'Patrick Hand SC', cursive; font-size: 46px; color: #fff;
   text-shadow: 3px 3px 0 var(--ink), -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink);
-  opacity: 0; transition: opacity 0.25s; white-space: nowrap;
+  /* visibility rides along with the fade: opacity alone leaves the element
+     painted on some phone GPUs — the four-layer text-shadow ghosts after the
+     text itself has faded (seen on the horse's gait toasts, which show for
+     under a second). Hidden also drops it from hit-testing. */
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.25s, visibility 0s 0.25s; white-space: nowrap;
 }
-#toast.show { opacity: 1; }
+#toast.show { opacity: 1; visibility: visible; transition: opacity 0.25s; }
 /* Boarding prompt at a lift station, in the panel's paper style. A prompt with
    something to do (board, get in, skip) does it when it's tapped or clicked. */
 #prompt {

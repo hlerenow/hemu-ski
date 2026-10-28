@@ -14,7 +14,16 @@ export class Sound {
     this.musicOn = true;
   }
   start() {
-    if (this.ctx) return;
+    if (this.ctx) {
+      // Phones suspend the context whenever the page loses the audio session
+      // (switching apps or tabs, locking the screen, a call coming in, moving
+      // between the game and the diorama). Nothing used to wake it again:
+      // start() returned early and every effect checks only that the context
+      // exists, so the sound stayed gone until a full reload. Any start()
+      // call — every tap and keypress makes one — now revives it instead.
+      this.resume();
+      return;
+    }
     const ctx = (this.ctx = new AudioContext());
     this.sfx = ctx.createGain();
     this.sfx.gain.value = this.sfxOn ? 1 : 0;
@@ -87,6 +96,20 @@ export class Sound {
       o.start();
       return o;
     });
+  }
+  // Wakes a suspended (or, on iOS, interrupted) context. Browsers only let it
+  // run again inside a user gesture, so outside one this may do nothing.
+  resume() {
+    if (this.ctx && this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume().catch(() => {});
+  }
+  // Starts or revives the sound on every event a browser counts as a gesture.
+  // A touch's pointerdown isn't one (only its pointerup and touchend are), and
+  // the stick and the touch buttons call start() on pointerdown, so without
+  // these a phone could stay silent until something was clicked.
+  listen() {
+    for (const type of ['pointerup', 'touchend', 'click', 'keydown']) {
+      window.addEventListener(type, () => this.start(), { capture: true, passive: true });
+    }
   }
   setSfx(on) {
     this.sfxOn = on;

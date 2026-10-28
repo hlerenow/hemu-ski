@@ -374,6 +374,7 @@ export function createSnowSpecks(count = 150) {
 // Paper-white puffs close in from the edges as the camera dives into a cloud
 // and open out again as it comes through. `set(c)` takes the cover, 0–1.
 export function createCloudWipe(el) {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const blobs = [];
   for (let i = 0; i < 9; i++) {
     const b = document.createElement('i');
@@ -383,8 +384,15 @@ export function createCloudWipe(el) {
   return (c) => {
     el.style.visibility = c > 0 ? 'visible' : 'hidden';
     if (c <= 0) return;
+    if (reducedMotion.matches) {
+      for (const b of blobs) b.el.style.display = 'none';
+      el.style.opacity = c;
+      el.style.backgroundColor = 'rgb(251, 250, 245)';
+      return;
+    }
     const R = Math.max(window.innerWidth, window.innerHeight);
     for (const b of blobs) {
+      b.el.style.display = '';
       const off = (1 - c) * b.r * R;
       b.el.style.transform = `translate(${Math.cos(b.a) * off}px, ${Math.sin(b.a) * off}px) scale(${b.s * (0.5 + c * 1.1)})`;
     }

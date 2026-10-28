@@ -1,3 +1,4 @@
+import { setLoadingProgress, setLoadingArrival, finishLoading } from '../loading.js';
 // Tabletop diorama of the whole Hemu (Jikepulin) ski area: the game's world cut
 // out as a block on a walnut plinth, every run painted on as a trail-map line,
 // working lifts and tiny riders, viewed with an orbit camera. The block is the
@@ -40,11 +41,12 @@ const camera = new THREE.PerspectiveCamera(30, 1, 20, 80000);
 
 // Coming back from the game, the loading screen says so.
 const arrivalNote = takeArrivalNote();
-if (arrivalNote) document.querySelector('#loading > :last-child').textContent = arrivalNote;
+if (arrivalNote) setLoadingArrival(arrivalNote);
 // The game's world, as the game loads it: with the map editor's edits unless
 // the address says ?original, as the game's does.
-const resort = await loadResort({ original: new URLSearchParams(location.search).has('original') });
-await document.fonts.load('40px "Patrick Hand SC"').catch(() => {});
+const resort = await loadResort({ original: new URLSearchParams(location.search).has('original'), onProgress: (p) => setLoadingProgress(p * 0.75) });
+await Promise.all([document.fonts.load('40px "Patrick Hand SC"'), document.fonts.load('20px "Patrick Hand"')]).catch(() => {});
+setLoadingProgress(0.875);
 const { ground: hf, meta } = resort;
 // The block is off the origin, as in the game (it reaches down to the service centres).
 const [cx, cz] = hf.center;
@@ -465,18 +467,20 @@ let wipe = null;
 function dive(item, go, note) {
   if (wipe) return;
   const f = nav.focus(item, { dive: true });
-  flyCamera(viewOf(f.point, 160, [0.7, 1.0]), f.point, { dur: 1.3, ease: (t) => t * t * (3 - 2 * t) });
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reducedMotion) flyCamera(viewOf(f.point, 160, [0.7, 1.0]), f.point, { dur: 1.3, ease: (t) => t * t * (3 - 2 * t) });
   pauseSpin();
   if (note) noteArrival(note);
-  wipe = { t: 0, dur: 1.3, cloud: (t) => THREE.MathUtils.smoothstep(t, 0.35, 1), done: go };
+  wipe = { t: 0, dur: reducedMotion ? 0.45 : 1.3, cloud: (t) => THREE.MathUtils.smoothstep(t, 0.35, 1), done: go };
 }
 function emerge(item) {
   const f = nav.focus(item);
   controls.target.copy(f.point);
-  camera.position.copy(viewOf(f.point, 160, [0.7, 1.0]));
-  flyCamera(viewOf(f.point, frameDistance(f.size)), f.point, { dur: 2.2 });
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  camera.position.copy(viewOf(f.point, reducedMotion ? frameDistance(f.size) : 160, [0.7, 1.0]));
+  if (!reducedMotion) flyCamera(viewOf(f.point, frameDistance(f.size)), f.point, { dur: 2.2 });
   setCloud(1);
-  wipe = { t: 0, dur: 2.2, cloud: (t) => 1 - THREE.MathUtils.smoothstep(t, 0.05, 0.55) };
+  wipe = { t: 0, dur: reducedMotion ? 0.65 : 2.2, cloud: (t) => 1 - THREE.MathUtils.smoothstep(t, 0.05, 0.55) };
 }
 const startAt = nav.itemOf(new URLSearchParams(location.search).get('at'));
 if (startAt) {
@@ -521,7 +525,6 @@ window.addEventListener('pageshow', (e) => {
 const clock = new THREE.Clock();
 let time = 0;
 const hideForNormals = [sky, runMap.group, base.shadow];
-document.getElementById('loading').classList.add('done');
 
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -575,4 +578,5 @@ function frame() {
 }
 
 window.__diorama = { scene, camera, controls, skiers, runMap, lifts, forest, renderer, nav, stations, lodges, you };
+await finishLoading();
 requestAnimationFrame(frame);

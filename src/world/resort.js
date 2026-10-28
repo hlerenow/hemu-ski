@@ -31,13 +31,20 @@ export const MAIN_RUN = '云霄峰道'; // Yunxiaofeng, the run under Gondola No
 // `ground` (the heightfield all of that made, which everything stands on),
 // `lakes`, `summitFrame` (where the summit is laid out from) and `treeModels`
 // (the forest's baked trees, see loadTreeModels in trees.js).
-export async function loadResort({ original = false } = {}) {
-  const [world, treeModels] = await Promise.all([loadWorld({ edits: !original }), loadTreeModels()]);
+export async function loadResort({ original = false, onProgress = () => {} } = {}) {
+  // Completed startup stages, rather than a timer or a byte-download estimate.
+  let progress = 0;
+  const completed = (weight) => { progress += weight; onProgress(progress); };
+  const [world, treeModels] = await Promise.all([
+    loadWorld({ edits: !original }).then((world) => { completed(2 / 3); return world; }),
+    loadTreeModels().then((models) => { completed(1 / 6); return models; }),
+  ]);
   const { meta } = world;
   const piste = new PisteField(meta.runs, world.detail.size, 4, 60, world.detail.center);
   const ground = raiseBanks(world.detail, meta.runs, piste, gameClearings(meta.lifts));
   const summitFrame = shapeSummit(ground, meta.lifts);
   const lakes = shapeLakes(ground, meta.lakes);
+  onProgress(1);
   return { ...world, piste, ground, lakes, summitFrame, treeModels };
 }
 

@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "fetch-data": "node tools/terrain/fetch-data.mjs",
-    "test": "node tests/rider-animation.mjs && node tests/landing-recovery.mjs"
+    "test": "node tests/loading-icons.mjs && node tests/rider-animation.mjs && node tests/landing-recovery.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

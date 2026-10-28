@@ -256,6 +256,12 @@ export class Hud {
     this.toastEl.textContent = text;
     this.toastEl.classList.add('show');
     clearTimeout(this.toastT);
-    this.toastT = setTimeout(() => this.toastEl.classList.remove('show'), ms);
+    clearTimeout(this.toastClear);
+    this.toastT = setTimeout(() => {
+      this.toastEl.classList.remove('show');
+      // Once the fade is over the text goes too, so nothing of it can linger
+      // on screen (or be read out) while the element sits invisible.
+      this.toastClear = setTimeout(() => { this.toastEl.textContent = ''; }, 300);
+    }, ms);
   }
 }
