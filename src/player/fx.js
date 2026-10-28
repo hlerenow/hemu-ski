@@ -28,12 +28,25 @@ export class Trail {
   clear() { this.pts.length = 0; this.last = null; this.#upload(); }
   add(p, side, width) {
     if (this.last && this.last.distanceToSquared(p) < 0.36) return;
+    // Start a new strip at zero width so it cannot connect to the previous
+    // strip, even when the rider has travelled a long way on a lift.
+    if (!this.last && this.pts.length) {
+      this.pts.push({ x: p.x, y: p.y + 0.03, z: p.z, sx: side.x, sz: side.z, w: 0 });
+    }
     this.last = p.clone();
     this.pts.push({ x: p.x, y: p.y + 0.03, z: p.z, sx: side.x, sz: side.z, w: width });
-    if (this.pts.length > this.max) this.pts.shift();
+    while (this.pts.length > this.max) this.pts.shift();
     this.#upload();
   }
-  gap(p) { this.add(p, new THREE.Vector3(1, 0, 0), 0); this.last = null; }
+  gap() {
+    if (!this.last) return;
+    // Close at the last drawn point, not at a potentially distant new position.
+    const q = this.pts[this.pts.length - 1];
+    this.pts.push({ ...q, w: 0 });
+    if (this.pts.length > this.max) this.pts.shift();
+    this.last = null;
+    this.#upload();
+  }
   #upload() {
     const a = this.pos;
     this.pts.forEach((q, i) => {

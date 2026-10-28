@@ -214,10 +214,10 @@ export class Rider {
     if (id !== 'classic') {
       if (!this.models.has(id)) {
         this.models.set(id, import('./rider-model.js')
-          .then(async ({ RIDER_MODELS, loadRiderModel, RiderModel }) => {
+          .then(async ({ RIDER_MODELS, loadRiderModel, loadPitching, RiderModel }) => {
             const from = RIDER_MODELS[id].walkFrom;
-            const [gltf, borrow] = await Promise.all([loadRiderModel(id), from && loadRiderModel(from)]);
-            return new RiderModel(gltf, id, { borrow });
+            const [gltf, borrow, pitching] = await Promise.all([loadRiderModel(id), from && loadRiderModel(from), loadPitching().catch((err) => { console.warn('Pitching animation unavailable; using procedural throw.', err); return null; })]);
+            return new RiderModel(gltf, id, { borrow, pitching });
           })
           .catch((err) => { this.models.delete(id); throw err; }));
       }
@@ -291,9 +291,13 @@ export class Rider {
     if (!entry) {
       entry = { model: null };
       entry.promise = import('./rider-model.js')
-        .then(async ({ RIDER_MODELS, loadRiderModel, RiderModel }) => {
+        .then(async ({ RIDER_MODELS, loadRiderModel, loadPitching, RiderModel }) => {
           if (!RIDER_MODELS[id].outfits?.[outfit]) return null;
-          entry.model = new RiderModel(await loadRiderModel(id, outfit), id, { outfit, fit: base });
+          const [gltf, pitching] = await Promise.all([
+            loadRiderModel(id, outfit),
+            loadPitching().catch((err) => { console.warn('Pitching animation unavailable; using procedural throw.', err); return null; }),
+          ]);
+          entry.model = new RiderModel(gltf, id, { outfit, fit: base, pitching });
           return entry.model;
         })
         .catch((err) => { console.warn(`No ${outfit} outfit for the ${id} rider; keeping their own clothes.`, err); return null; });
@@ -320,6 +324,9 @@ export class Rider {
     this.seat = seat;
     if (mode !== 'sit') this.#standOnBoard();
     this.locomotion = mode;
+    const liftSeat = mode === 'sit' && !!seat?.lift;
+    this.proceduralBoard.position.set(0, liftSeat ? -0.48 : 0, liftSeat ? -0.48 : 0);
+    this.proceduralBoard.rotation.y = liftSeat ? Math.PI / 2 : 0;
     this.skiPose.snap = true;
     this.#gearVisibility();
     return true;
@@ -351,11 +358,16 @@ export class Rider {
   }
 
   #gearVisibility() {
-    const riding = this.locomotion === 'ride', board = riding && this.gear !== 'ski';
+    const riding = this.locomotion === 'ride', liftSeat = this.locomotion === 'sit' && !!this.seat?.lift;
+    const board = (riding || liftSeat) && this.gear !== 'ski';
     this.proceduralBoard.visible = board && this.modelId !== 'female';
-    if (this.boardAssembly) this.boardAssembly.visible = board && this.modelId === 'female';
+    if (this.boardAssembly) {
+      this.boardAssembly.position.set(0, liftSeat ? -0.48 : 0, liftSeat ? 0.48 : 0);
+      this.boardAssembly.visible = board && this.modelId === 'female';
+    }
     for (const binding of this.bindings) binding.visible = board && this.modelId !== 'female';
-    for (const g of [...this.skis, ...this.poles]) g.visible = riding && this.gear === 'ski';
+    for (const g of this.skis) g.visible = (riding || liftSeat) && this.gear === 'ski';
+    for (const g of this.poles) g.visible = riding && this.gear === 'ski';
     for (const boot of this.boots) boot.visible = !this.model && this.locomotion !== 'walk';
   }
 
@@ -550,7 +562,7 @@ export class Rider {
     if (this.reachW < 1e-3) this.reachW = 0;
     if (this.throwT !== null) {
       this.throwT += dt;
-      if (this.throwT >= THROW.length || sitting) this.throwT = null;
+      if (this.throwT >= this.throwLength || sitting) this.throwT = null;
     }
     if (this.throwT !== null && this.locomotion === 'ride') this.#throwOnBoard(this.throwT);
     else if (this.reachW > 0 && this.locomotion === 'ride') this.#reachOut();
@@ -688,6 +700,10 @@ export class Rider {
   // (RiderModel), on the board the trunk and arm. Not while seated.
   startThrow() {
     if (this.locomotion !== 'ride' && this.locomotion !== 'walk') return false;
+    const pitch = this.locomotion === 'walk' ? this.model?.pitching : null;
+    this.throwLength = pitch?.clip.duration ?? THROW.length;
+    this.throwRelease = pitch ? 1.6 : THROW.release;
+    this.throwUsesPitch = !!pitch;
     this.throwT = 0;
     return true;
   }

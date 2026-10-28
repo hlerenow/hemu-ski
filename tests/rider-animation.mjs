@@ -257,6 +257,32 @@ try {
       console.log(`PASS ${label} ${side} ski grip: fingers from ${knuckle.toFixed(0)}°, thumb tip at ${thumbTip.toFixed(0)}° round the fist`);
     }
   }
+  // The real Mixamo pitching asset drives both riders and gives control back
+  // to the walk mixer; on the board, the original pose must remain unchanged.
+  const pitching = await load('motions/baseball-pitching-v01/baseball-pitching-v01.glb');
+  for (const [id, asset] of [['female', gltf], ['male', maleGltf]]) {
+    const subject = new RiderModel(asset, id, { pitching, borrow: id === 'male' ? gltf : null });
+    assert(subject.pitching.clip.tracks.length > 50, `${id}: pitching tracks retargeted`);
+    const state = { ...rider, throwT: null, throwUsesPitch: true };
+    for (let i = 0; i < 30; i++) subject.update(1 / 60, state, 'walk', 0);
+    const shoulder = subject.bones.RightArm.bone;
+    const idle = shoulder.quaternion.clone();
+    state.throwT = 1.5; subject.update(1 / 60, state, 'walk', 0);
+    assert(shoulder.quaternion.angleTo(idle) > 0.3, `${id}: throw changes the right arm`);
+    state.throwT = null; subject.update(1 / 60, state, 'walk', 0);
+    assert(shoulder.quaternion.angleTo(idle) < 0.01, `${id}: walk pose restored`);
+    const original = new RiderModel(asset, id, { borrow: id === 'male' ? gltf : null });
+    state.throwT = 0.4;
+    subject.update(1, state, 'ride', 0); original.update(1, state, 'ride', 0);
+    for (const { bone } of subject.rest) {
+      const oldBone = original.root.getObjectByName(bone.name);
+      assert(bone.quaternion.clone().normalize().angleTo(oldBone.quaternion.clone().normalize()) < 1e-5, `${id}: board pose unchanged for ${bone.name}`);
+    }
+    console.log(`PASS ${id} pitching: walk retarget, recovery, unchanged board pose`);
+  }
+  const swimPitch = new RiderModel(swimGltf, 'female', { outfit: 'swim', fit: model, pitching });
+  assert(swimPitch.pitching.clip.tracks.length > 50, 'swimsuit: pitching tracks retargeted');
+  console.log('PASS swimsuit pitching tracks retargeted');
 } finally {
   await server.close();
 }

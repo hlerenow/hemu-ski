@@ -14,19 +14,20 @@ export class MouseLook {
   constructor(canvas) {
     this.canvas = canvas;
     this.on = false;
+    this.force = false;
     this.yaw = 0;
     this.pitch = 0;
     this.dYaw = 0;
     this.dPitch = 0;
     this.wanted = () => true; // whether a click on the view should take the pointer now
     canvas.addEventListener('click', () => {
-      if (this.on && !this.locked && this.wanted()) canvas.requestPointerLock?.()?.catch?.(() => {});
+      if ((this.on || this.force) && !this.locked && this.wanted()) canvas.requestPointerLock?.()?.catch?.(() => {});
     });
     // Where the browser won't hand over the pointer (some embedded views), a
     // drag across the view looks round instead.
     let dragging = false;
     canvas.addEventListener('pointerdown', (e) => {
-      dragging = this.on && e.pointerType === 'mouse' && this.wanted();
+      dragging = (this.on || this.force) && e.pointerType === 'mouse' && this.wanted();
     });
     window.addEventListener('pointerup', () => (dragging = false));
     document.addEventListener('mousemove', (e) => {

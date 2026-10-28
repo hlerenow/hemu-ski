@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { makeToon } from '../render/toon.js';
 import { PISTE_HALF_WIDTH } from './data.js';
 import { liftStations } from './stations.js';
+import { chairliftPath, sampleChairlift, advanceChairlift } from './chairlift-path.js';
 
 const mats = {
   steel: makeToon({ color: '#9aa3a6' }),
@@ -173,8 +174,10 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
   const group = new THREE.Group();
   const movers = [];
   const belts = [];
+  const chairSystems = [];
   const lines = [];
   const footprints = [];
+  const collisionParts = [];
   const stations = [], badges = [];
   const towerGeo = mergeGeometries([
     new THREE.CylinderGeometry(0.35, 0.5, 1, 6).translate(0, 0.5, 0),
@@ -211,6 +214,54 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
     const cableH = (isGondola ? 13 : 9) * scale;
     const paint = isGondola ? cabinPaint(lift.name) : 'chair';
     const badge = lift.name && liftBadge(lift.name, paint);
+
+    // No. 5 is a fixed-grip chairlift: both strands and terminal turns are
+    // one loop, with one phase and one speed shared by every chair.
+    if (lift.name === '5号索道' && lift.type === 'chair_lift') {
+      const bottom = A.y <= B.y ? A : B, top = A.y <= B.y ? B : A;
+      const path = chairliftPath(hf, bottom, top, scale);
+      const lineYaw = Math.atan2(path.dir.x, path.dir.z);
+      for (const P of [bottom, top]) {
+        // An open-sided terminal leaves the turning chairs and riders unobstructed.
+        const terminal = new THREE.Group();
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(11 * scale, 0.35 * scale, 10 * scale), mats.roof);
+        roof.position.y = 5.1 * scale; terminal.add(roof);
+        const wheel = new THREE.Mesh(new THREE.TorusGeometry(3 * scale, 0.12 * scale, 8, 32), mats.dark);
+        wheel.rotation.x = Math.PI / 2; wheel.position.y = 3.7 * scale; terminal.add(wheel);
+        for (const x of [-5, 5]) for (const z of [-4, 4]) {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.25 * scale, 5 * scale, 0.25 * scale), mats.steel);
+          post.position.set(x * scale, 2.5 * scale, z * scale); terminal.add(post);
+          collisionParts.push({ x: P.x + (Math.cos(lineYaw) * x + Math.sin(lineYaw) * z) * scale,
+            z: P.z + (-Math.sin(lineYaw) * x + Math.cos(lineYaw) * z) * scale,
+            yaw: lineYaw, hw: 0.125 * scale, hd: 0.125 * scale, top: P.y + 5 * scale });
+        }
+        terminal.position.copy(P); terminal.rotation.y = lineYaw; group.add(terminal);
+        if (badge) {
+          const sign = new THREE.Sprite(badge); sign.scale.setScalar(3 * scale);
+          sign.position.set(0, 8 * scale, 0); terminal.add(sign);
+        }
+        footprints.push({ x: P.x, z: P.z, yaw: lineYaw, hw: 5 * scale, hd: 5 * scale, top: P.y + 5.3 * scale, passable: true });
+      }
+      for (const p of path.supports.slice(1, -1)) {
+        const ground = hf.heightAt(p.x, p.z);
+        place(towerMats, p.x, ground - 0.5, p.z, 0, scale, p.y - ground + 1);
+        // Keep the crossbeam above the grip; placing it at rope height made
+        // every passing chair clip through the solid tower arm.
+        place(armMats, p.x, p.y + 0.7 * scale, p.z, lineYaw, scale);
+        collisionParts.push({ x: p.x, z: p.z, yaw: 0, hw: 0.5 * scale, hd: 0.5 * scale, top: p.y + 0.5 * scale });
+      }
+      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(path.points), mats.cable));
+      const up = path.supports.map(p => p.clone().addScaledVector(path.side, -3 * scale));
+      lines.push({ id: lift.id, name: lift.name, type: lift.type, a: bottom, b: top, cable: up });
+      const system = { id: lift.id, path, phase: 0, speed, targetSpeed: speed, chairs: [] };
+      const count = Math.max(2, Math.round(path.total / (25 * gap)));
+      for (let i = 0; i < count; i++) {
+        const m = { kind: 'chair', system, offset: i * path.total / count, position: new THREE.Vector3(), tangent: new THREE.Vector3(), yaw: lineYaw };
+        movers.push(m); system.chairs.push(m);
+      }
+      chairSystems.push(system);
+      continue;
+    }
 
     for (const [P, flip] of [[A, 0], [B, Math.PI]]) {
       const st = new THREE.Group();
@@ -301,7 +352,7 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
       st.add(m);
     }
     for (const b of badges) b.position.y = md.stationHeight + BADGE * 0.75;
-    for (const f of footprints) f.hw = md.stationHalfWidth * stationScale;
+    for (const f of footprints) if (!f.passable) f.hw = md.stationHalfWidth * stationScale;
   }).catch((err) => console.warn('Lift models failed to load; keeping the box stand-ins.', err));
 
   const tmp = new THREE.Vector3();
@@ -309,9 +360,21 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
     group,
     lines,
     footprints,
-    update(dt) {
+    collisionParts,
+    chairSystems,
+    update(dt, chairDt = dt) {
       for (const b of belts) b.tex.offset.y = (b.tex.offset.y - dt * b.rate) % 1;
+      for (const system of chairSystems) {
+        advanceChairlift(system, chairDt);
+      }
       for (const m of movers) {
+        if (m.system) {
+          m.distance = sampleChairlift(m.system.path, m.system.phase + m.offset, m.position, m.tangent);
+          m.yaw = Math.atan2(m.tangent.x, m.tangent.z);
+          _o.position.copy(m.position); _o.rotation.set(0, m.yaw, 0); _o.scale.setScalar(scale); _o.updateMatrix();
+          m.mesh.setMatrixAt(m.index, _o.matrix);
+          continue;
+        }
         const total = m.acc[m.acc.length - 1];
         m.s = (m.s + dt * speed) % total;
         const d = m.up ? m.s : total - m.s;

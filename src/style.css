@@ -596,6 +596,30 @@ body.touch .panel .body { max-height: calc(100dvh - 190px); overflow-y: auto; to
   width: 52px; height: 52px; fill: none; stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
 }
 
+/* The opening field guide shares the paper-and-ink language of the HUD. */
+.panel:has(.intro-guide) { width: min(540px, calc(100vw - 32px)); padding: 27px 18px 15px; }
+.panel:has(.intro-guide) .body { max-height: calc(100dvh - 155px); overflow-y: auto; }
+.intro-guide .intro-place { margin: 0 0 9px; font-size: 17px; line-height: 1.25; }
+.intro-place span { opacity: 0.7; }
+.intro-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.intro-tile { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; background: #edf4f5; border: 1.5px solid #a9c6d1; }
+.intro-tile svg { width: 38px; height: 38px; flex: none; fill: none; stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.intro-tile div { min-width: 0; }
+.intro-tile b, .intro-tile span { display: block; }
+.intro-tile b { font-size: 17px; line-height: 1.1; }
+.intro-tile span { font-size: 14px; line-height: 1.25; }
+.panel .intro-tile kbd, .panel .intro-more kbd { font-size: 13px; min-width: 20px; padding: 0 3px; margin: 1px; }
+.intro-more { font-size: 14px; line-height: 1.3; margin-top: 7px; }
+.intro-more summary { cursor: pointer; font-weight: bold; }
+.panel .intro-more p { margin: 5px 0; }
+.panel .intro-credit { margin: 7px 0 0; font-size: 12px; line-height: 1.2; opacity: 0.65; }
+body.touch .panel:has(.intro-guide) { width: min(540px, calc(100vw - 28px)); padding: 27px 14px 14px; }
+@media (max-width: 420px) {
+  .intro-tiles { grid-template-columns: 1fr; }
+  .intro-tile { padding: 4px 7px; }
+  .intro-tile svg { width: 32px; height: 32px; }
+}
+
 body.touch #bigmap .x { top: 0; right: 2px; width: 44px; height: 44px; font-size: 30px; }
 body.touch #bigmap .zoom { gap: 8px; }
 body.touch #bigmap .zoom button { width: 44px; height: 44px; }

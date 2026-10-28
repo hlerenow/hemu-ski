@@ -43,6 +43,12 @@ const BOARD_TOP = 0.025;
 const FADE = 0.25;
 const _fade = new THREE.Quaternion();
 const loading = new Map();
+let pitchingPromise;
+export function loadPitching() {
+  pitchingPromise ||= new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'models/motions/baseball-pitching-v01/baseball-pitching-v01.glb')
+    .catch((err) => { pitchingPromise = null; throw err; });
+  return pitchingPromise;
+}
 export function loadRiderModel(id = 'male', outfit = null) {
   const spec = RIDER_MODELS[id];
   const file = outfit ? spec?.outfits?.[outfit]?.file : spec?.file;
@@ -75,7 +81,7 @@ export class RiderModel {
   // `outfit` names one of RIDER_MODELS[id].outfits, sized to `fit`: the
   // RiderModel of the rider's own clothes. `borrow`: the loaded model of the
   // rider's `walkFrom`, if it has one.
-  constructor(gltf, id = 'male', { outfit = null, fit = null, borrow = null } = {}) {
+  constructor(gltf, id = 'male', { outfit = null, fit = null, borrow = null, pitching = null } = {}) {
     const spec = RIDER_MODELS[id], wearing = outfit ? spec.outfits[outfit] : spec;
     const scene = clone(gltf.scene);
     scene.traverse((o) => {
@@ -118,6 +124,18 @@ export class RiderModel {
     this.animationScene = clone(gltf.scene);
     for (const entry of this.rest) entry.animated = this.animationScene.getObjectByName(entry.bone.name);
     this.mixer = new THREE.AnimationMixer(this.animationScene);
+    // A separate target and mixer let the throw blend over the walk without
+    // disrupting the walk mixer's cached property values.
+    this.pitching = null;
+    if (pitching?.animations[0]) {
+      const pitchScene = clone(gltf.scene);
+      const pitchClip = retarget(pitching.animations[0], pitching.scene, gltf.scene);
+      const pitchMixer = new THREE.AnimationMixer(pitchScene);
+      const action = pitchMixer.clipAction(pitchClip).setLoop(THREE.LoopOnce, 1).play();
+      action.paused = true;
+      pitchMixer.update(0);
+      this.pitching = { scene: pitchScene, mixer: pitchMixer, action, clip: pitchClip };
+    }
     const own = (name) => gltf.animations.find((clip) => clip.name === name);
     const borrowed = (name) => {
       const clip = borrow?.animations.find((c) => c.name === name);
@@ -251,7 +269,10 @@ export class RiderModel {
       this.run.setEffectiveTimeScale(speed < 0.05 ? 0 : THREE.MathUtils.clamp(speed / 4, 0.25, 1.5));
       this.mixer.update(dt);
       this.#copyAnimated();
-      if (rider.throwT != null) this.#throw(rider.throwT);
+      if (rider.throwT != null) {
+        if (this.pitching && rider.throwUsesPitch) this.#pitch(rider.throwT);
+        else this.#throw(rider.throwT);
+      }
       else if (rider.reachW > 0) this.#reach(rider.reachAt, rider.reachW, rider.reachLeft ? 'Left' : 'Right');
     } else {
       // Clips animate all 65 bones; restore all of them before procedural posing.
@@ -448,6 +469,22 @@ export class RiderModel {
   handAt(out) {
     this.bones.RightHand.bone.getWorldPosition(out);
     return this.palmBone ? out.lerp(this.palmBone.getWorldPosition(_a), 0.6) : out;
+  }
+
+  // Mixamo pitching over the current walk pose; its own mixer never writes the
+  // live skeleton, so the transition back to walking retains all bone values.
+  #pitch(t) {
+    const { scene, mixer, action, clip } = this.pitching;
+    action.time = THREE.MathUtils.clamp(t, 0, clip.duration);
+    mixer.update(0);
+    const w = THREE.MathUtils.smoothstep(t, 0, 0.2) * (1 - THREE.MathUtils.smoothstep(t, clip.duration - 0.3, clip.duration));
+    for (const { bone } of this.rest) {
+      const source = scene.getObjectByName(bone.name);
+      if (!source) continue;
+      bone.position.lerp(source.position, w);
+      bone.quaternion.slerp(source.quaternion, w);
+    }
+    if (t < 1.6) this.#fist(0.9 * w, ['Right']);
   }
 
   // On foot, throwing (see throw.js), `t` s in: the whole body posed from the

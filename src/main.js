@@ -4,6 +4,8 @@ import { SERVICE_CENTRES, PISTE_HALF_WIDTH, ONSEN } from './world/data.js';
 import { loadResort, createResort, along, MAIN_RUN, TREELINE } from './world/resort.js';
 import { createBackdrop } from './world/terrain.js';
 import { gondolaCabin } from './world/props.js';
+import { boardingPath } from './world/chairlift-boarding.js';
+import { crossedChairliftPoint } from './world/chairlift-path.js';
 import { createSky, SKY } from './world/sky.js';
 import { Weather, WEATHERS, SUNRISE, SUNSET } from './world/weather.js';
 import { PUFF_COVER } from './world/onsen.js';
@@ -18,7 +20,6 @@ import { find } from './collection.js';
 import { Npc } from './npc/npc.js';
 import { CAST } from './npc/cast.js';
 import { Dialogue } from './npc/dialogue.js';
-import { THROW } from './player/throw.js';
 import { InkPost } from './render/post.js';
 import { toonUniforms } from './render/toon.js';
 import { Rider } from './player/rider.js';
@@ -142,7 +143,7 @@ const rides = lifts.lines.map((l) => {
   const bottom = up ? l.a : l.b, top = up ? l.b : l.a;
   const dir = new THREE.Vector3(top.x - bottom.x, 0, top.z - bottom.z).normalize();
   const label = l.name || (l.type === 'gondola' ? 'Gondola' : 'Chair lift');
-  return { id: l.id, label, bottom, top, dir, cable, acc, length: acc[acc.length - 1] };
+  return { id: l.id, label, bottom, top, dir, cable, acc, length: acc[acc.length - 1], fixedChair: lifts.chairSystems.some(s => s.id === l.id) };
 });
 const BOARD_REACH = 10;
 const boardSpots = rides.map((ride) => ({
@@ -302,7 +303,7 @@ function act(code, repeat = false) {
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearDog) petDog();
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearWheel) turnWheel(nearWheel);
   else if (code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
-  else if ((code === 'KeyE' || code === 'Space') && state === 'lift' && liftRide.t > 0.5) liftRide.t = liftRide.dur;
+  else if ((code === 'KeyE' || code === 'Space') && state === 'lift' && liftRide.t > 0.5) { if (liftRide.system) { if (!liftRide.waiting) liftRide.system.targetSpeed = 20; } else liftRide.t = liftRide.dur; }
   if ((code === 'Enter' || code === 'Space') && panelNext) { const f = panelNext; panelNext = null; f(); }
 }
 const pressE = () => { sound.start(); act('KeyE'); }; // a tapped prompt
@@ -376,7 +377,7 @@ function restoreRide() {
   }
 }
 function toggleLocomotion() {
-  if (!phys.grounded || phys.crashed > 0) return;
+  if (!phys.grounded || phys.crashed > 0 || (rider.throwT !== null && rider.locomotion === 'walk' && rider.throwUsesPitch)) return;
   if (rider.locomotion === 'walk') {
     restoreRide();
     hud.toast(touch.on ? 'On board' : 'On board · W push / tuck');
@@ -513,7 +514,7 @@ window.addEventListener('pagehide', saveWeather);
 // driving or soaking takes the pointer and the mouse swings the camera round
 // you. Remembered between visits.
 const mouseLook = new MouseLook(canvas);
-mouseLook.wanted = () => state === 'ride' || state === 'drive' || state === 'horse' || state === 'soak';
+mouseLook.wanted = () => state === 'ride' || state === 'drive' || state === 'horse' || state === 'soak' || state === 'lift';
 {
   const box = document.getElementById('set-mouselook');
   const set = (on) => { mouseLook.set(on); box.checked = on; };
@@ -601,38 +602,42 @@ gps.restore(gpsFrom()); // a destination set before a reload or a trip to the di
 const MOVES = {
   stick: '<circle cx="26" cy="26" r="22" stroke-dasharray="3 3"/><circle cx="19" cy="22" r="9" fill="#fff" stroke-width="2.4"/>'
     + '<path d="M26 9l-3 3M26 9l3 3M26 43l-3-3M26 43l3-3M9 26l3-3M9 26l3 3M43 26l-3-3M43 26l-3 3"/>',
+  speed: '<path d="M8 34a19 19 0 1 1 36 0M12 34h28M26 30l9-12"/><circle cx="26" cy="30" r="2.5" fill="#f0c24a"/>',
+  home: '<path d="M12 24a15 15 0 1 1 3 12M12 13v11h11"/>',
   ollie: '<circle cx="26" cy="26" r="21" fill="#f0c24a" stroke-width="2.4"/><path d="M15 33h22M26 29V15M20.5 20.5 26 15l5.5 5.5"/>',
   card: '<rect x="4" y="15" width="44" height="22" fill="#fff" stroke-width="2.4"/><path d="M11 26h20M37 21l5 5-5 5"/>',
   map: '<circle cx="26" cy="26" r="21" fill="#fff" stroke-width="2.4"/><path d="M17 37c3-8 6-13 9-20M30 38c-1-7 0-14 4-21" stroke="#4f8fd6"/>'
     + '<path d="M26 15l5 13-5-3-5 3z" fill="#f0c24a"/>',
 };
 const move = (name) => `<svg viewBox="0 0 52 52" aria-hidden="true">${MOVES[name]}</svg>`;
-const introPanel = () => touch.on ? showPanel('Hemu · 禾木', `
-  <p>Top of <b>Gondola No. 6</b>, 2,756 m. The whole mountain is yours, all the way down to the <b>East Service Centre</b>.</p>
-  <div class="keys moves">
-    ${move('stick')}<span><b>Drag</b> anywhere low on the left: sideways to carve, push up to tuck, pull back to skid</span>
-    ${move('ollie')}<span><b>Hold Ollie</b> and let go to jump · spin in the air</span>
-    ${move('card')}<span><b>Tap the card</b> when one pops up: ride a lift, take the pickup, the snowmobile or the Jetson ONE, pet ${DOG.en} the sheepdog</span>
-    ${move('map')}<span><b>Tap the map</b>, top right, for the whole mountain and the GPS</span>
-  </div>
-  <p class="dim">Terrain: real elevation data. Runs and lifts: OpenStreetMap / OpenSkiMap.</p>`, startRun, 'Drop in ▸') : showPanel('Hemu · 禾木', `
-  <p>Top of <b>Gondola No. 6</b>, Hemu Jikepulin, Altay — 2,756 m.
-  The whole mountain is yours: drop into <b>云霄峰道 Yunxiaofeng</b> (${Math.round(runLength)} m) or ride anywhere,
-  all the way down the valley to the <b>East Service Centre</b> (东区服务大厅), 1,300 m below.
-  Board the gondola at its station out front, or any lift at its bottom station, to head back up.</p>
-  <div class="keys">
-    <span><kbd>A</kbd><kbd>D</kbd></span><span>carve heelside / toeside</span>
-    <span><kbd>W</kbd></span><span>tuck for speed · push along on the flat</span>
-    <span><kbd>S</kbd></span><span>skid to scrub speed</span>
-    <span><kbd>Space</kbd></span><span>hold and release to ollie · spin in the air</span>
-    <span><kbd>E</kbd></span><span>board a lift at its station · take the pickup, the snowmobile or the Jetson ONE · ride the horse on the ridge past the ovoo</span>
-    <span><kbd>Space</kbd><kbd>Shift</kbd></span><span>in the Jetson ONE: take off and climb / come down and land</span>
-    <span><kbd>F</kbd></span><span>board / on foot with a walking rider · choose under Rider</span>
-    <span><kbd>E</kbd><kbd>Q</kbd></span><span>pet <b>${DOG.en}</b> the sheepdog, up here with you · throw a snowball for it</span>
-    <span><kbd>W</kbd><kbd>Shift</kbd></span><span>walk / run on foot · A/D turn · S stop</span>
-    <span><kbd>R</kbd></span><span>back to the top</span>
-  </div>
-  <p class="dim">Terrain: real elevation data. Runs and lifts: OpenStreetMap / OpenSkiMap.</p>`, startRun);
+// A compact first-run field guide: keep the essentials visible and the less
+// frequent controls available without covering the mountain with instructions.
+const introTile = (icon, title, instruction) => `<div class="intro-tile">${move(icon)}<div><b>${title}</b><span>${instruction}</span></div></div>`;
+const introPanel = () => showPanel('Hemu · 禾木', `
+  <div class="intro-guide">
+    <p class="intro-place">Gondola No. 6 · 2,756 m <span>— your mountain awaits</span></p>
+    <div class="intro-tiles">
+      ${touch.on ? `
+        ${introTile('stick', 'Carve &amp; speed', 'Drag low left · up to tuck · back to skid')}
+        ${introTile('ollie', 'Jump', 'Hold Ollie, then release · turn in the air')}
+        ${introTile('card', 'Explore', 'Tap the card to interact nearby')}
+        ${introTile('map', 'Find your way', 'Tap the map for the mountain &amp; GPS')}
+      ` : `
+        ${introTile('stick', 'Carve', '<kbd>A</kbd> <kbd>D</kbd> turn left / right')}
+        ${introTile('speed', 'Speed', '<kbd>W</kbd> tuck / push · <kbd>S</kbd> skid')}
+        ${introTile('ollie', 'Jump', '<kbd>Space</kbd> hold, release · spin in air')}
+        ${introTile('card', 'Explore', '<kbd>E</kbd> interact nearby')}
+        ${introTile('map', 'Map &amp; GPS', '<kbd>M</kbd> or click the map')}
+        ${introTile('home', 'Back to start', '<kbd>R</kbd> return to the top')}
+      `}
+    </div>
+    ${touch.on ? '' : `<details class="intro-more"><summary>More controls</summary>
+      <p><kbd>F</kbd> board / on foot (with a walking rider) · <kbd>W</kbd> walk, <kbd>Shift</kbd> run, <kbd>A</kbd> / <kbd>D</kbd> turn, <kbd>S</kbd> stop</p>
+      <p><kbd>E</kbd> pet ${DOG.en} · <kbd>Q</kbd> throw a snowball</p>
+      <p>Jetson ONE: <kbd>Space</kbd> take off / climb · <kbd>Shift</kbd> descend / land</p>
+    </details>`}
+    <p class="intro-credit">Terrain: real elevation data · Runs &amp; lifts: OpenStreetMap / OpenSkiMap</p>
+  </div>`, startRun, 'Drop in ▸');
 
 // ---------- Camera ----------
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _look = new THREE.Vector3();
@@ -919,11 +924,16 @@ const STEP = 1 / 120;
 const _side = new THREE.Vector3(), _tail = new THREE.Vector3(), _sv = new THREE.Vector3();
 
 function frame() {
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const elapsedFrame = clock.getDelta();
+  const dt = Math.min(elapsedFrame, 0.05);
+  // The rope must cover the same distance at low rendering frame rates. Bound
+  // long tab stalls without changing the game's existing physics time step.
+  const chairDt = Math.min(elapsedFrame, 0.25);
   time += dt;
   readInput();
+  lifts.update(dt, chairDt);
 
-  if (bigMap.isOpen) {
+  if (bigMap.isOpen && state !== 'lift') {
     sound.update(0, 0, false); // the ride holds still under the map
   } else if (state === 'ride') {
     acc += dt;
@@ -1026,7 +1036,7 @@ function frame() {
     sound.update(0, 0, false);
   } else if (state === 'lift') {
     const label = `${liftRide.ride.label} ↑`;
-    updateLift(dt); // may step you off at the top
+    updateLift(liftRide.system ? chairDt : dt); // may step you off at the top
     if (timing) elapsed += dt;
     hud.update(phys, elapsed, state === 'lift' ? label : null);
     sound.update(0, 0, false);
@@ -1066,7 +1076,6 @@ function frame() {
   ripples.update(dt, dry);
   spray.update(dt);
   powderSpray.update(dt);
-  lifts.update(dt);
   if (change && time >= change.at) {
     rider.wear(change.outfit);
     change = null;
@@ -1135,7 +1144,7 @@ function touchLayout() {
   } else if (state === 'soak') {
     touch.layout({ layout: 'lift', act: { label: 'Get out', icon: 'out' } });
   } else {
-    touch.layout({ layout: 'lift', stick: false, act: liftRide.t > 0.5 ? { label: 'Skip', icon: 'skip' } : null });
+    touch.layout({ layout: 'lift', stick: false, act: liftRide.t > 0.5 && !liftRide.waiting ? { label: liftRide.system ? 'Faster' : 'Skip', icon: 'skip' } : null });
   }
 }
 
@@ -1219,6 +1228,8 @@ function updateBoarding() {
 let liftRide = null;
 const _c = new THREE.Vector3();
 function board(ride) {
+  const system = lifts.chairSystems.find(s => s.id === ride.id);
+  if (system) { boardChair(ride, system); return; }
   restoreRide();
   state = 'lift';
   // Sped up: 1–2 km of cable in 10–22 s.
@@ -1236,6 +1247,7 @@ function board(ride) {
 
 function updateLift(dt) {
   const L = liftRide, { ride } = L;
+  if (L.system) { updateChairRide(dt); return; }
   L.t = Math.min(L.dur, L.t + dt);
   const u = L.t / L.dur;
   const s = (u - Math.sin(u * Math.PI * 2) / (Math.PI * 2)) * ride.length; // eased start and stop
@@ -1256,6 +1268,138 @@ function updateLift(dt) {
   camera.fov = 58 + portrait() * 12;
   camera.updateProjectionMatrix();
   if (L.t >= L.dur) unload(ride);
+}
+
+// Seat coordinates are in Rider's body frame. Both Mixamo riders use the same
+// seated IK, with their own measured hip and leg proportions.
+const chairSeat = {
+  hips: new THREE.Vector3(0, 0, 0),
+  feet: [new THREE.Vector3(0.18, -0.48, 0.48), new THREE.Vector3(-0.18, -0.48, 0.48)],
+  grips: [new THREE.Vector3(0.35, 0.18, 0.22), new THREE.Vector3(-0.35, 0.18, 0.22)],
+  kneeOut: 0.12, fold: 0.05, lift: true,
+};
+function boardChair(ride, system) {
+  lifts.update(0); // Populate grip positions even if boarding before the first frame.
+  const start = phys.pos.clone();
+  const target = system.path.points[0].clone();
+  target.y = detail.heightAt(target.x, target.z);
+  const posts = lifts.collisionParts.filter(o => Math.hypot(o.x - ride.bottom.x, o.z - ride.bottom.z) < 9);
+  const waypoints = boardingPath(start, target, posts);
+  if (!waypoints) { hud.toast('Move clear of the station posts to board', 2000); return; }
+  restoreRide();
+  const walkLength = waypoints.slice(1).reduce((sum, p, i) => sum + Math.hypot(p.x - waypoints[i].x, p.z - waypoints[i].z), 0);
+  const walkTime = Math.max(1, walkLength / 3);
+  state = 'lift';
+  mouseLook.force = true;
+  mouseLook.reset();
+  rider.setLocomotion('walk');
+  // Start sitting just before the grip reaches the outgoing strand, so the
+  // moving cushion picks the rider up instead of passing through their body.
+  const catchAt = system.path.total - 1.2;
+  const chair = system.chairs.map(c => ({ c, wait: ((catchAt - c.distance + system.path.total) % system.path.total) / Math.max(system.speed, 0.1) }))
+    .filter(x => x.wait >= walkTime + 0.5).sort((a, b) => a.wait - b.wait)[0]?.c ?? system.chairs[0];
+  liftRide = { ride, system, chair, catchAt, t: 0, waiting: true, waypoints, walkLength, walkTime, previous: chair.distance };
+  phys.vel.set(0, 0, 0);
+  trail.gap(phys.pos);
+  cabin.visible = false;
+  hud.prompt('Walk to the loading point · wait for your chair', 'Wait for your chair');
+}
+function updateChairRide(dt) {
+  const L = liftRide, { chair, system, ride } = L;
+  L.t += dt;
+  if (L.waiting) {
+    const k = THREE.MathUtils.smootherstep(L.t / L.walkTime, 0, 1);
+    let distance = k * L.walkLength, a = L.waypoints[0], b = L.waypoints.at(-1);
+    for (let i = 1; i < L.waypoints.length; i++) {
+      const next = L.waypoints[i], length = Math.hypot(next.x - a.x, next.z - a.z);
+      b = next;
+      if (distance <= length || i === L.waypoints.length - 1) {
+        const t = length ? Math.min(1, distance / length) : 1;
+        phys.pos.x = THREE.MathUtils.lerp(a.x, b.x, t);
+        phys.pos.z = THREE.MathUtils.lerp(a.z, b.z, t);
+        break;
+      }
+      distance -= length; a = next;
+    }
+    phys.pos.y = detail.heightAt(phys.pos.x, phys.pos.z);
+    const dx = b.x - a.x, dz = b.z - a.z;
+    phys.yaw = yawOf(dx, dz);
+    phys.vel.set(dx, 0, dz).normalize().multiplyScalar(L.t < L.walkTime ? 3 : 0);
+    poseRider(dt);
+    if (crossedChairliftPoint(L.previous, chair.distance, L.catchAt, system.path.total)) {
+      L.waiting = false;
+      phys.vel.set(0, 0, 0);
+      startHop();
+      rider.setLocomotion('sit', chairSeat);
+      hud.prompt('<kbd>Space</kbd> speed up the lift · mouse / arrows look around', 'Speed up the lift ▸', pressE);
+    }
+    L.previous = chair.distance;
+  } else {
+    // The seat offset turns with the chair through the terminal bullwheel.
+    const c = Math.cos(chair.yaw), s = Math.sin(chair.yaw);
+    rider.root.position.copy(chair.position);
+    rider.root.position.x += c * 0.55 + s * 0.08;
+    rider.root.position.z += -s * 0.55 + c * 0.08;
+    rider.root.position.y -= 2.25;
+    rider.root.quaternion.setFromAxisAngle(Y_AXIS, chair.yaw + Math.PI);
+    if (hop) hopping(dt);
+    rider.update(dt, { crouch: 0, air: false, speed: 0, lean: 0, twist: 0 });
+    phys.pos.copy(rider.root.position);
+    if (system.path.upLength - chair.distance < 75) system.targetSpeed = 5;
+    if (chair.distance >= system.path.upLength - 0.8 && chair.distance < system.path.upLength + 10) {
+      unloadChair(ride, chair, system); return;
+    }
+  }
+  if (keys.has('ArrowLeft')) mouseLook.turn(1.15 * dt, 0);
+  if (keys.has('ArrowRight')) mouseLook.turn(-1.15 * dt, 0);
+  _look.copy(L.waiting ? phys.pos : chair.position);
+  _look.y += L.waiting ? 1 : -1.75;
+  _w.copy(_look).addScaledVector(ride.dir, -6).addScaledVector(system.path.side, 3); _w.y += 2;
+  swing(_w, _look, ride.dir, mouseLook.yaw, mouseLook.pitch);
+  _w.y = Math.max(_w.y, detail.heightAt(_w.x, _w.z) + 1.2);
+  // The terminal bullwheel is at rope height. Keep the station camera below
+  // it and the roof, so a close orbit does not put that machinery across the rider.
+  const station = Math.hypot(_look.x - ride.bottom.x, _look.z - ride.bottom.z) < 10 ? ride.bottom
+    : Math.hypot(_look.x - ride.top.x, _look.z - ride.top.z) < 10 ? ride.top : null;
+  if (station) _w.y = Math.min(_w.y, station.y + 2.8);
+  // Shorten the orbit before nearby trunks, posts or other moving chairs can
+  // cross the view. Anticipate the next half second of each chair's travel.
+  for (let u = 0.3; u <= 1; u += 0.08) {
+    _c.lerpVectors(_look, _w, u);
+    const tree = forest.hit(_c.x, _c.z, 0.45);
+    const wall = phys.obstacles.some(o => _c.y < o.top + 0.4 && boxGap(o, _c.x, _c.z) < 0.45);
+    let chairNear = false;
+    for (const other of system.chairs) {
+      if (!L.waiting && other === chair) continue;
+      const p = other.position;
+      if (_c.y < p.y - 3.4 || _c.y > p.y + 0.6) continue;
+      const dx = other.tangent.x * system.speed * 0.5, dz = other.tangent.z * system.speed * 0.5;
+      const length2 = dx * dx + dz * dz;
+      const k = length2 ? THREE.MathUtils.clamp(((_c.x - p.x) * dx + (_c.z - p.z) * dz) / length2, 0, 1) : 0;
+      if (Math.hypot(_c.x - p.x - dx * k, _c.z - p.z - dz * k) < 2.1) { chairNear = true; break; }
+    }
+    if ((tree && _c.y < tree.top + 0.4) || wall || chairNear) { _w.lerpVectors(_look, _w, Math.max(0.22, u - 0.12)); break; }
+  }
+  camera.position.lerp(_w, 1 - Math.exp(-dt * (station ? 9 : 5)));
+  camLook.lerp(_look, 1 - Math.exp(-dt * 8));
+  camera.lookAt(camLook); camera.fov = 58 + portrait() * 12; camera.updateProjectionMatrix();
+}
+function unloadChair(ride, chair, system) {
+  system.targetSpeed = 5;
+  mouseLook.force = false;
+  if (!mouseLook.on && mouseLook.locked) document.exitPointerLock();
+  mouseLook.reset();
+  startHop();
+  rider.setLocomotion('ride');
+  // Step outward from the uphill strand, clear of following chairs and the
+  // terminal posts. The existing hop blends the rider onto the groomed snow.
+  const x = chair.position.x + ride.dir.x * 2 - system.path.side.x * 3.5;
+  const z = chair.position.z + ride.dir.z * 2 - system.path.side.z * 3.5;
+  phys.reset(x, z, yawOf(ride.dir.x, ride.dir.z));
+  camDir.copy(ride.dir);
+  liftRide = null; state = 'ride';
+  hud.prompt(''); hud.toast(`${ride.label} · ${Math.round(ride.top.y).toLocaleString()} m`, 2000);
+  trail.gap(phys.pos); gps.reroute(gpsFrom());
 }
 
 // Step off at the top station onto the best open snow nearby, facing downhill.
@@ -1619,7 +1763,7 @@ function updateWheels(dt) {
 }
 
 // A snowball, thrown overarm the way the camera looks (see throw.js): it
-// leaves the hand at THROW.release, and the dog is off at the wind-up.
+// leaves the hand at the selected animation’s release time; the dog is off at the wind-up.
 const throwDir = new THREE.Vector3();
 const _throw = new THREE.Vector3();
 function throwSnowball() {
@@ -1629,7 +1773,7 @@ function throwSnowball() {
   throwDir.setY(0).normalize();
   if (!rider.startThrow()) return;
   _throw.copy(phys.pos).addScaledVector(throwDir, 0.3).y += 1.5; // about where it'll leave the hand
-  dog.throwBall(_throw, throwDir, THROW.release);
+  dog.throwBall(_throw, throwDir, rider.throwRelease);
 }
 
 // ---------- Driving ----------
@@ -2245,6 +2389,6 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { npcs, dialogue, phys, rider, camera, mouseLook, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, foxes, horse, mountHorse, getOffHorse, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { npcs, dialogue, phys, rider, camera, mouseLook, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, foxes, horse, mountHorse, getOffHorse, summit, wheels, turnWheel, sound, rides, lifts, board, get liftRide() { return liftRide; }, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
 await finishLoading();
 requestAnimationFrame(frame);

@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { loadWorld, PisteField, SERVICE_CENTRES, ONSEN, placeOf } from './data.js';
 import { raiseBanks, gameClearings } from './banks.js';
 import { shapeSummit, createSummit } from './summit.js';
+import { shapeChairliftStations } from './chairlift-terrain.js';
 import { shapeLakes, createLakes, overWater, mooring } from './lakes.js';
 import { createDetailTerrain } from './terrain.js';
 import { createForest, gameTrees, toyForest, loadTreeModels, GAME_FOREST } from './trees.js';
@@ -44,6 +45,7 @@ export async function loadResort({ original = false, onProgress = () => {} } = {
   const ground = raiseBanks(world.detail, meta.runs, piste, gameClearings(meta.lifts));
   const summitFrame = shapeSummit(ground, meta.lifts);
   const lakes = shapeLakes(ground, meta.lakes);
+  shapeChairliftStations(ground, meta.lifts);
   onProgress(1);
   return { ...world, piste, ground, lakes, summitFrame, treeModels };
 }
@@ -120,7 +122,7 @@ export function createResort(resort, { terrain: terrainOpts = {}, forest: forest
   group.add(terrain, ...lodges, forest.group, lifts.group, summit.group, water.group, markers);
   if (onsenFits) group.add(onsen.group);
   if (fits([banner.userData.footprint])) group.add(banner);
-  const obstacles = [...buildings, ...props];
+  const obstacles = [...buildings.filter(b => !b.passable), ...lifts.collisionParts, ...props];
 
   // The vehicles, each where it's parked: the pickup, the snowmobile and the
   // Jetson ONE in front of the East Service Centre (or wherever the map editor
