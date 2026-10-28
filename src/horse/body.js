@@ -22,7 +22,7 @@ const ANGLES = ['cannon', 'pastern', 'toe', 'blade'];
 
 // A damped spring that follows a target: `hz` its own swing, `damp` how soon
 // it settles (1 at once, less overshoots).
-function spring(hz, damp) {
+export function spring(hz, damp) {
   return {
     x: 0, v: 0, hz, damp,
     step(target, dt, kick = 0) {
@@ -67,11 +67,16 @@ function cr(p0, p1, p2, p3, t) {
 const GAITS = {
   walk: { phase: [0.25, 0.75, 0, 0.5], duty: 0.62, speed: 1.7, hz: 1.0, lift: [0.07, 0.05], fold: [1.0, 0.55], reach: [0.02, 0.01], bob2: 0.006, bob1: 0, low: 0, pitch: 0, flex: 0, roll: 0.02, neck: 0.06, nod2: 0.05, nod1: 0, rock: 0.25, tail: 0.1, ears: 0 },
   trot: { phase: [0, 0.5, 0.5, 0], duty: 0.38, speed: 3.8, hz: 1.45, lift: [0.1, 0.075], fold: [1.6, 0.85], reach: [0.04, 0.02], bob2: 0.012, bob1: 0, low: 0.004, pitch: 0.008, flex: 0, roll: 0, neck: 0.15, nod2: 0.015, nod1: 0, rock: 0.25, tail: 0.45, ears: 0 },
-  canter: { phase: [0.6, 0.33, 0.33, 0], duty: 0.33, speed: 6.5, hz: 1.7, lift: [0.11, 0.08], fold: [1.6, 0.95], reach: [0.06, 0.03], bob2: 0.004, bob1: 0.012, low: 0.014, pitch: 0.02, flex: 0.01, roll: 0, neck: 0.1, nod2: 0, nod1: 0.08, rock: 0.32, tail: 1.0, ears: 0.1 },
-  gallop: { phase: [0.5, 0.38, 0.12, 0], duty: 0.25, speed: 11, hz: 2.0, lift: [0.1, 0.08], fold: [1.7, 1.0], reach: [0.08, 0.04], bob2: 0.004, bob1: 0.012, low: 0.022, pitch: 0.02, flex: 0.015, roll: 0, neck: 0.4, nod2: 0, nod1: 0.08, rock: 0.2, tail: 1.3, ears: 0.15 },
+  canter: { phase: [0.6, 0.33, 0.33, 0], duty: 0.33, speed: 6.5, hz: 1.7, lift: [0.11, 0.08], fold: [1.6, 0.95], reach: [0.06, 0.03], bob2: 0.004, bob1: 0.012, low: 0.014, pitch: 0.02, flex: 0.01, roll: 0, neck: 0.1, nod2: 0, nod1: 0.08, rock: 0.32, tail: 0.5, ears: 0.1 },
+  gallop: { phase: [0.5, 0.38, 0.12, 0], duty: 0.25, speed: 11, hz: 2.0, lift: [0.1, 0.08], fold: [1.7, 1.0], reach: [0.08, 0.04], bob2: 0.004, bob1: 0.012, low: 0.022, pitch: 0.02, flex: 0.015, roll: 0, neck: 0.4, nod2: 0, nod1: 0.08, rock: 0.2, tail: 1.35, ears: 0.15 },
 };
 export const GAIT_NAMES = Object.keys(GAITS);
 const KEYS = ['duty', 'speed', 'hz', 'bob2', 'bob1', 'low', 'pitch', 'flex', 'roll', 'neck', 'nod2', 'nod1', 'rock', 'tail', 'ears'];
+// How far the dock lifts and drops again with each drive of the hind legs, by
+// gait (radians): hardly at the trot, most at the gallop, where it sends a
+// wave down the hair every stride (as in the user's reference footage of the
+// four gaits).
+const PUMP = [0, 0.03, 0.04, 0.12];
 
 export class HorseBody {
   constructor(rig) {
@@ -92,12 +97,16 @@ export class HorseBody {
     this.hoofLen = this.ref.legs.map((l) => l.hoof.y / Math.max(0.1, -l.toe.y));
     // Springs that make the neck and tail follow the body a moment late.
     this.springs = { neck: spring(3, 0.55), head: spring(3.5, 0.5), tail: spring(2.2, 0.35), swing: spring(1.8, 0.3) };
-    this.hipsWas = this.ref.hips.y;
+    this.going = { speed: 0, turn: 0 }; // last frame's, for how fast they change (the tail feels it)
     // Standing, it fidgets (idle.js); `idling` off holds it still, to compare.
     this.idle = new HorseIdle();
     this.idling = true;
     this.I = this.idle.out;
     this.still = 1; // how much it's standing: 1 - stride, eased
+    // What it's minding, set by whoever drives it, each 0–1 (eased by them):
+    // `graze` its nose down in the snow, nibbling; `alert` head up, ears
+    // pricked and looking `look` radians round (+ to its left) at something.
+    this.attention = { graze: 0, alert: 0, look: 0 };
   }
 
   // The gait the horse is in, by name (between two while it changes).
@@ -111,7 +120,7 @@ export class HorseBody {
     this.I = this.idle.update(dt);
     this.still = this.idling ? 1 - this.stride : 0;
     this.#pose(this.#mix(), dt);
-    this.rig.pose(this.P);
+    this.rig.pose(this.P, dt);
   }
 
   // The stride's timing follows the speed: walking, then trotting from about
@@ -302,18 +311,41 @@ export class HorseBody {
     // a moment behind. Both follow on springs, so they flow rather than tick.
     const front = Math.min(m.phase[0], m.phase[1]);
     const run = clamp(this.gait - 2, 0, 1); // 0 cantering, with the neck up and arched … 1 galloping
-    const hipsV = dt > 0 ? (P.hips.pos.y - this.hipsWas) / dt : 0;
-    this.hipsWas = P.hips.pos.y;
     const sp = this.springs, h = Math.min(dt, 1 / 30);
     const neck = s * (m.neck + m.nod2 * Math.cos(2 * TAU * (ph - front - m.duty * 0.3)) + m.nod1 * Math.sin(TAU * (ph - m.rock))) - pitch * 0.6;
-    P.neck.pitch = sp.neck.step(neck + I.neck * w, h);
-    P.neck.turn = clamp(0.4 * this.turnRate, -0.5, 0.5) + I.turn * w;
-    P.head = sp.head.step(-0.7 * s * m.neck - 0.15 * run * s + I.head * w, h) - 0.2 * (P.neck.pitch - s * m.neck - I.neck * w);
-    P.ears[0] = m.ears * s + I.ears[0] * w;
-    P.ears[1] = m.ears * s + I.ears[1] * w;
-    // The tail lifts with the speed, out behind at the gallop, bouncing as the
-    // body rises and falls, and swings a little with the stride and the turn.
-    P.tail.lift = sp.tail.step(s * m.tail + I.tailLift * w, h, -hipsV * 40);
+    // Grazing, the nose goes down to the snow (as far as the neck goes
+    // without folding into the chest), nodding as it pulls at the grass under
+    // it; alert, the head comes up and round to what it's watching, ears
+    // pricked forward.
+    const { graze, alert, look } = this.attention;
+    const chew = 0.04 * Math.max(0, Math.sin(TAU * 1.3 * this.t)) ** 2;
+    const wantNeck = lerp(lerp(neck + I.neck * w, 0.84 + chew, graze), -0.2 + 0.4 * s * m.neck, alert);
+    P.neck.pitch = sp.neck.step(wantNeck, h);
+    P.neck.turn = lerp(clamp(0.4 * this.turnRate, -0.5, 0.5) + I.turn * w * (1 - graze * 0.6), clamp(look, -0.9, 0.9), alert);
+    const wantHead = lerp(lerp(-0.7 * s * m.neck - 0.15 * run * s + I.head * w, 0.3 + chew * 2, graze), -0.12, alert);
+    const held = lerp(lerp(s * m.neck + I.neck * w, 0.84, graze), -0.2 + 0.4 * s * m.neck, alert);
+    P.head = sp.head.step(wantHead, h) - 0.2 * (P.neck.pitch - held);
+    P.ears[0] = lerp(m.ears * s + I.ears[0] * w, -0.15, alert);
+    P.ears[1] = lerp(m.ears * s + I.ears[1] * w, -0.15, alert);
+    // The tail is held out further the faster it goes, out behind at the
+    // gallop, lifting at the dock as the hind legs drive, and swings a little
+    // with the stride and out of the turn. The rig
+    // hangs the hair from that (tail.js): it feels gravity, the body rising
+    // and falling under it, the horse speeding up or slowing down, swinging
+    // round a turn and into or out of it, and the wind of its going, which
+    // streams it back (most at the gallop, as the square of the speed) and
+    // flutters its end at the canter and gallop.
+    const hind = Math.min(m.phase[2], m.phase[3]), g = clamp(this.gait, 0, 3), gi = Math.min(2, Math.floor(g));
+    const pump = s * lerp(PUMP[gi], PUMP[gi + 1], g - gi) * Math.cos(TAU * (ph - hind - m.duty / 2));
+    P.tail.lift = sp.tail.step(s * m.tail + pump + I.tailLift * w, h);
     P.tail.swing = sp.swing.step(s * 0.05 * Math.sin(TAU * ph) - 0.3 * this.turnRate + I.tailSwing * w, h);
+    const go = this.going;
+    const ahead = dt > 0 ? clamp((this.speed - go.speed) / dt, -4, 4) : 0;
+    P.tail.spin = dt > 0 ? clamp((this.turnRate - go.turn) / dt, -6, 6) : 0;
+    go.speed = this.speed;
+    go.turn = this.turnRate;
+    const fall = 9.8 / this.scale, wind = 2 * fall * (this.speed * this.scale / 11) ** 2 * Math.sign(this.speed);
+    P.tail.push.set(-this.speed * this.turnRate, -fall, -ahead - wind);
+    P.tail.flutter = s * smoothstep(this.gait, 1.6, 3) * clamp(Math.abs(this.speed) * this.scale / 11, 0, 1.2);
   }
 }

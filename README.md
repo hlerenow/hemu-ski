@@ -142,6 +142,33 @@ stays where you left it), and **R** takes it back to its spot. The run name says
 云湖 while you're on the lake. It's on the mini-map, the big map and the diorama
 too. The boat is a stand-in, built in code, until its Tripo model is made.
 
+Out along the ridge past the ovoo, an **Altai horse** (阿勒泰马) roams loose,
+saddled and bridled: it grazes, nosing through the snow a step at a time,
+wanders to another spot, or stands about, flicking its ears and swishing its
+tail. Come within about 25 m and it looks up, ears pricked, and watches you;
+stop (or walk, or come slowly) and it walks over, trotting from further off,
+and stops beside you with its left side to you. Press **E** to get on: you
+walk round to its left stirrup if you're on the wrong side (off the board, if
+you rode up), then climb up into the saddle. **W** asks for a faster gait and
+**S** a slower one, a press at a time: walk, trot, canter and gallop, about 6,
+14, 23 and 40 km/h, and it keeps the gait you ask for without holding the key.
+Hold **S** to pull up. **A** and **D** steer, round on the spot when it's
+standing, wider the faster it goes. It slows on steep snow (walking only past
+about 30°) and won't go where it's steeper still, and it pulls up short of
+trees, buildings and water. Each hoof kicks up a little snow as it comes
+down, far finer than a board's spray: a few crisp chips on a groomed run, a
+soft puff in the powder off it (where the hooves sink in a few centimetres),
+and at the canter and gallop a flick thrown back off the toe. You hear each
+hoof, a crunch on the run and a muffled whump in powder, and at the canter
+and gallop the horse's breathing, a blow out and a draw in with every stride,
+heavier the longer it runs; pull up after a hard run and it stands blowing
+for a while until it has its wind back. **E** again gets you off: it stops and you climb
+down on its left, on foot or back on your board as you came. It stays where
+you left it, and goes back to the ridge once you're well away. The camera
+hangs off its left while it stands and swings in behind as it gets going. On a
+touch screen the button says **Ride**, then **Get off**, and the stick up and
+down asks for a faster or slower gait.
+
 Up at the top lives **Mantou** (馒头), the resort's Old English Sheepdog, on
 the snow a few metres off to the side of where you start. On its own it
 potters about its spot: looks round, sniffs the snow, shakes it off its coat.

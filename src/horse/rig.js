@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { makeToon } from '../render/toon.js';
+import { TailChain } from './tail.js';
 
 const FILE = import.meta.env.BASE_URL + 'models/horse/altai-horse.glb';
 let loading = null;
@@ -36,6 +37,15 @@ const SPINE = ['spine', 'spine1', 'spine2', 'chest'];
 const NECK = [['chest1', 0.45], ['neck', 0.3], ['neck1', 0.15], ['neck2', 0.1]];
 const TURN = [['neck', 0.25], ['neck1', 0.25], ['neck2', 0.2], ['neck3', 0.15], ['head', 0.15]];
 const TAIL = ['tail', 'tail1', 'tail2', 'tail3', 'tail4'];
+// How a raised tail shares its lift, root to tip: the dock (the first two) is
+// lifted by its muscles; the hair beyond only straightens behind it, a touch
+// less at the end, and droops under its own weight (tail.js).
+const LIFT = [1.0, 0.3, 0, 0, 0];
+const SWING = [0.3, 0.25, 0.2, 0.15, 0.1];
+const TIP = 0.11; // how far the hair runs on past tail4's joint
+// How far the tail's locks ripple at their ends in full flutter (model units;
+// toon.js `strands`), and where the hair hangs from and down to at rest.
+const STRANDS = 0.012, HAIR_TOP = 0.53, HAIR_END = 0.1;
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
 const _q = new THREE.Quaternion(), _r = new THREE.Quaternion(), _s = new THREE.Quaternion(), _e = new THREE.Euler();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e2 = new THREE.Vector3();
@@ -50,8 +60,12 @@ const _cannon = new THREE.Vector3(), _pastern = new THREE.Vector3();
 //   neck: { pitch, turn }  radians, + down and + to its left, shared up the neck
 //   head: pitch, + nose down, on top
 //   ears: [left, right]    radians tipped back
-//   tail: { lift, swing }  raised from hanging (most at the root); swung to its
-//                          left, shared root to tip
+//   tail: { lift, swing,   raised from hanging (most at the root); swung to its
+//           push, spin,    left, shared root to tip. What the tail feels of the
+//           flutter }      horse's going: `push` the model frame's own
+//                          acceleration turned round, gravity in it (model
+//                          units/s²), `spin` how fast its turn quickens (rad/s²),
+//                          `flutter` 0–1 the wind in the hair
 //   legs: [4 × { hoof, cannon, pastern, toe, blade }]  where each coronet goes
 //                          (the hoof's top), the way the cannon, pastern and
 //                          hoof point, and how far a shoulder blade swings back
@@ -63,7 +77,7 @@ export function restPose(rig) {
     neck: { pitch: 0, turn: 0 },
     head: 0,
     ears: [0, 0],
-    tail: { lift: 0, swing: 0 },
+    tail: { lift: 0, swing: 0, push: new THREE.Vector3(), spin: 0, flutter: 0 },
     legs: r.legs.map((l) => ({ hoof: l.hoof.clone(), cannon: l.cannon.clone(), pastern: l.pastern.clone(), toe: l.toe.clone(), blade: 0 })),
   };
 }
@@ -73,7 +87,8 @@ export class HorseRig {
     this.scene = clone(gltf.scene);
     this.scene.traverse((o) => {
       if (!o.isMesh) return;
-      o.material = makeToon({ map: o.material.map, side: o.material.side }, { rim: 1, hatch: 0 });
+      if (o.isSkinnedMesh) tailStrands(o);
+      o.material = makeToon({ map: o.material.map, side: o.material.side }, { rim: 1, hatch: 0, strands: o.isSkinnedMesh ? 1 : 0 });
       o.castShadow = true;
       o.frustumCulled = false; // bind-pose bounds don't follow a galloping leg
       this.mesh = o;
@@ -133,10 +148,17 @@ export class HorseRig {
       })),
     };
     this.short = [0, 0, 0, 0]; // how far each leg fell short of its hoof last pose (model units)
+    // The tail's hair, hanging from where it's held (tail.js): its joints root
+    // to tip, where the pose holds them; and the hind legs' joints, hip end to
+    // hoof, for it to keep behind.
+    this.tail = new TailChain(TAIL.map((n, i) => (i < TAIL.length - 1 ? B[TAIL[i + 1]].position.length() : TIP)));
+    this.held = Array.from({ length: TAIL.length + 1 }, () => new THREE.Vector3());
+    this.hind = this.legs.filter((l) => !l.front).map(() => [0, 1, 2, 3].map(() => new THREE.Vector3()));
   }
 
-  // Turns the bones to `P` (see restPose).
-  pose(P) {
+  // Turns the bones to `P` (see restPose), `dt` s after the last pose (0
+  // holds the tail where it hangs).
+  pose(P, dt = 0) {
     for (const b of this.list) {
       const r = b.userData.rest;
       b.position.copy(r.p);
@@ -160,15 +182,29 @@ export class HorseRig {
       this.#turn(B[n], _q.setFromAxisAngle(X, -P.ears[i]));
       this.#fk(B[n].userData.i, B[n].userData.end);
     });
-    // The tail: raised, most at the root, then swung across.
+    // The tail: raised, most at the root, then swung across. That's where it's
+    // held; the hair follows it a moment late, once the legs are placed.
     const { tail } = P;
-    TAIL.forEach((n, i) => this.#turn(B[n], _q.setFromAxisAngle(X, tail.lift * [0.5, 0.25, 0.12, 0.08, 0.05][i])));
+    TAIL.forEach((n, i) => this.#turn(B[n], _q.setFromAxisAngle(X, tail.lift * LIFT[i])));
     this.#fk(B.tail.userData.i, B.tail.userData.end);
     if (tail.swing) {
-      TAIL.forEach((n, i) => this.#rotate(B[n], _q.setFromAxisAngle(this.#forward(B.hips, _a), tail.swing * [0.3, 0.25, 0.2, 0.15, 0.1][i])));
+      TAIL.forEach((n, i) => this.#rotate(B[n], _q.setFromAxisAngle(this.#forward(B.hips, _a), tail.swing * SWING[i])));
     }
+    TAIL.forEach((n, i) => this.held[i].copy(B[n].userData.mp));
+    this.held[TAIL.length].copy(Y).applyQuaternion(B.tail4.userData.mq).multiplyScalar(TIP).add(this.held[TAIL.length - 1]);
     // Each leg reaches its hoof (see #reach).
     this.legs.forEach((leg, i) => { this.short[i] = this.#reach(leg, P.legs[i]); });
+    // The hair hangs from where the tail's held, and each bone points at the
+    // joint after it.
+    this.legs.filter((l) => !l.front).forEach((leg, k) => leg.bones.slice(1).forEach((b, j) => this.hind[k][j].copy(b.userData.mp)));
+    const at = this.tail.follow(this.held, this.hind, tail, dt);
+    TAIL.forEach((n, i) => this.#aim(B[n], _a.subVectors(at[i + 1], B[n].userData.mp)));
+    // And the locks of hair flutter in the wind.
+    const strands = this.mesh.material.userData.strands;
+    if (strands) {
+      strands.amount.value = tail.flutter * STRANDS;
+      strands.time.value += dt;
+    }
   }
 
   // A foreleg's shoulder blade swings back about its top by `blade`. Then
@@ -286,6 +322,26 @@ export class HorseRig {
   at(name, out = new THREE.Vector3()) {
     return out.copy(this.bones[name].userData.mp);
   }
+}
+
+// Each vertex of the tail's hair: how far down it is, 0 at the dock (or off
+// the tail) … 1 at its end, as it hangs at rest; and its lock's phase, from
+// where it hangs across and front to back, so neighbouring locks ripple a
+// little out of step (toon.js `strands`).
+function tailStrands(mesh) {
+  const g = mesh.geometry;
+  if (g.attributes.aStrand) return;
+  const pos = g.attributes.position, index = g.attributes.skinIndex, weight = g.attributes.skinWeight;
+  const tail = new Set(mesh.skeleton.bones.flatMap((b, i) => (TAIL.includes(b.name) ? [i] : [])));
+  const out = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    let w = 0;
+    for (let k = 0; k < 4; k++) if (tail.has(index.getComponent(i, k))) w += weight.getComponent(i, k);
+    const down = THREE.MathUtils.clamp((HAIR_TOP - pos.getY(i)) / (HAIR_TOP - HAIR_END), 0, 1);
+    out[i * 2] = down * THREE.MathUtils.smoothstep(w, 0.5, 0.9);
+    out[i * 2 + 1] = pos.getX(i) * 60 + pos.getZ(i) * 35;
+  }
+  g.setAttribute('aStrand', new THREE.BufferAttribute(out, 2));
 }
 
 function isUnder(o, b) {

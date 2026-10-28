@@ -84,9 +84,11 @@ const DOWN = new THREE.Vector3(0, -1, 0);
 const _t = new THREE.Vector3(), _d = new THREE.Vector3();
 // The primitive character's build, for sitting on a seat: how high its hips sit
 // above the cushion, where its torso pivots above the hips, its shoulders
-// (out, up) from that pivot, and how far its arms reach (shoulder to mitt).
+// (out, up) from that pivot, how far its arms reach (shoulder to mitt), and
+// its legs' (hip to ankle, straight; ankle over the sole; hip joint out from
+// and down from the hips).
 const UPPER_ARM = 0.22, FOREARM = 0.25;
-const CLASSIC_BUILD = { seat: 0.15, pivot: 0.04, shoulder: [0.26, 0.43], reach: UPPER_ARM + FOREARM };
+const CLASSIC_BUILD = { seat: 0.15, pivot: 0.04, shoulder: [0.26, 0.43], reach: UPPER_ARM + FOREARM, leg: 0.6, ankle: 0.15, hip: [0.12, 0] };
 
 // How far forward (radians) a seated rider with `build` folds at the waist for
 // its hands to reach `grip` from hips at `hips` (body frame): upright enough to
@@ -302,9 +304,14 @@ export class Rider {
 
   // 'ride' on the board, 'walk' on foot (riders with walk and run clips), or
   // 'sit' on a vehicle's `seat`: { hips, feet: [left, right], grips: [left,
-  // right], kneeOut }, the cushion under the hips, the soles' spots and the
-  // handlebar grips, in the body's frame (+z forward, +x left), the root
-  // following the vehicle, and how far the knees spread (0.45 if it doesn't say).
+  // right], kneeOut, toes, fold, tilt, look }, the cushion under the hips, the
+  // soles' spots and the handlebar grips, in the body's frame (+z forward, +x
+  // left), the root following the vehicle, how far the knees spread (0.45 if
+  // it doesn't say), how far each foot turns from the body's heading (radians
+  // about +y, left first; straight ahead if it doesn't say), how far the torso
+  // folds forward (radians; if it doesn't say, as far as the hands need:
+  // reachFold), and Eulers turning the pelvis and the head on top of the pose
+  // (a rider going with a horse: see src/horse/riding.js).
   // 'act' is for play().
   setLocomotion(mode, seat = this.seat) {
     if (mode === 'walk' && !this.canWalk) return false;
@@ -669,11 +676,12 @@ export class Rider {
     const { build } = this;
     this.hips.position.copy(seat.hips);
     this.hips.position.y += build.seat;
-    this.hips.rotation.set(0, 0, 0);
-    const fold = reachFold(build, this.hips.position, seat.grips[0]);
+    const tilt = seat.tilt, look = seat.look;
+    this.hips.rotation.set(tilt?.x ?? 0, tilt?.y ?? 0, tilt?.z ?? 0);
+    const fold = seat.fold ?? reachFold(build, this.hips.position, seat.grips[0]);
     this.torso.rotation.set(fold, p.twist * 0.12, -p.lean);
-    this.head.rotation.set(-fold * 0.85, -p.twist * 0.15, p.lean * 0.6);
-    this.feet.forEach((f, i) => f.position.copy(seat.feet[i]));
+    this.head.rotation.set(-fold * 0.85 + (look?.x ?? 0), -p.twist * 0.15 + (look?.y ?? 0), p.lean * 0.6 + (look?.z ?? 0));
+    this.feet.forEach((f, i) => { f.position.copy(seat.feet[i]); f.rotation.set(0, seat.toes?.[i] ?? 0, 0); });
   }
 
   // Starts throwing overarm (see throw.js): on foot the whole body throws

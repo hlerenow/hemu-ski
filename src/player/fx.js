@@ -117,10 +117,16 @@ function dotTexture() {
 // Puffs of snow kicked up when the edge bites or the board skids. Powder's are
 // bigger and hang in the air longer (`size`, `gravity`, `life` in seconds).
 export class Spray {
-  constructor(n = 400, { size = 0.28, gravity = 6, life = 0.5 } = {}) {
+  // `scatter` how far apart (m) a burst starts, `lift` how fast (m/s) at
+  // least it's thrown up; `settle`, it's gone once it falls back to the snow
+  // it was thrown from; `color` the flakes'.
+  constructor(n = 400, { size = 0.28, gravity = 6, life = 0.5, scatter = 0.4, lift = 1, settle = false, color = '#ffffff' } = {}) {
     this.n = n;
     this.gravity = gravity;
     this.lifespan = life;
+    this.scatter = scatter;
+    this.lift = lift;
+    this.floor = settle ? new Float32Array(n) : null;
     this.p = new Float32Array(n * 3);
     this.v = new Float32Array(n * 3);
     this.life = new Float32Array(n);
@@ -129,7 +135,7 @@ export class Spray {
     this.geo.setAttribute('position', new THREE.BufferAttribute(this.p, 3).setUsage(THREE.DynamicDrawUsage));
     this.points = new THREE.Points(
       this.geo,
-      new THREE.PointsMaterial({ size, map: dotTexture(), transparent: true, alphaTest: 0.3, depthWrite: false, color: '#ffffff' }),
+      new THREE.PointsMaterial({ size, map: dotTexture(), transparent: true, alphaTest: 0.3, depthWrite: false, color }),
     );
     this.points.frustumCulled = false;
     for (let i = 0; i < n; i++) this.p[i * 3 + 1] = -1e5;
@@ -138,13 +144,14 @@ export class Spray {
     for (let k = 0; k < count; k++) {
       const i = this.next;
       this.next = (this.next + 1) % this.n;
-      this.p[i * 3] = pos.x + (Math.random() - 0.5) * 0.4;
+      this.p[i * 3] = pos.x + (Math.random() - 0.5) * this.scatter;
       this.p[i * 3 + 1] = pos.y + 0.05;
-      this.p[i * 3 + 2] = pos.z + (Math.random() - 0.5) * 0.4;
+      this.p[i * 3 + 2] = pos.z + (Math.random() - 0.5) * this.scatter;
       this.v[i * 3] = vel.x + (Math.random() - 0.5) * spread;
-      this.v[i * 3 + 1] = vel.y + Math.random() * spread * 0.8 + 1;
+      this.v[i * 3 + 1] = vel.y + Math.random() * spread * 0.8 + this.lift;
       this.v[i * 3 + 2] = vel.z + (Math.random() - 0.5) * spread;
       this.life[i] = this.lifespan * (1 + Math.random());
+      if (this.floor) this.floor[i] = pos.y;
     }
   }
   update(dt) {
@@ -158,6 +165,7 @@ export class Spray {
       this.p[i * 3] += this.v[i * 3] * dt;
       this.p[i * 3 + 1] += this.v[i * 3 + 1] * dt;
       this.p[i * 3 + 2] += this.v[i * 3 + 2] * dt;
+      if (this.floor && this.v[i * 3 + 1] < 0 && this.p[i * 3 + 1] < this.floor[i]) { this.life[i] = 0; this.p[i * 3 + 1] = -1e5; }
     }
     this.geo.attributes.position.needsUpdate = true;
   }

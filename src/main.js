@@ -12,6 +12,7 @@ import { shoreAt, Ripples } from './world/lakes.js';
 import { PrayerWheels } from './world/prayer-wheels.js';
 import { Dog, DOG } from './dog/dog.js';
 import { Foxes, FOX, foxDen } from './fox/fox.js';
+import { Horse, HORSE, PACES, horsePasture } from './horse/horse.js';
 import { find } from './collection.js';
 import { Npc } from './npc/npc.js';
 import { CAST } from './npc/cast.js';
@@ -280,7 +281,9 @@ function act(code, repeat = false) {
     else if (!getOut()) hud.toast(car.floats ? 'Row to the shore to step out' : 'Not over the water', 1600);
   }
   else if (code === 'KeyE' && !repeat && state === 'soak') leavePool();
+  else if (code === 'KeyE' && !repeat && state === 'horse') getOffHorse();
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearCar) getIn(nearCar);
+  else if (code === 'KeyE' && !repeat && state === 'ride' && nearHorse) mountHorse();
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearPool) soak();
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearDog) petDog();
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearWheel) turnWheel(nearWheel);
@@ -489,7 +492,7 @@ window.addEventListener('pagehide', saveWeather);
 // driving or soaking takes the pointer and the mouse swings the camera round
 // you. Remembered between visits.
 const mouseLook = new MouseLook(canvas);
-mouseLook.wanted = () => state === 'ride' || state === 'drive' || state === 'soak';
+mouseLook.wanted = () => state === 'ride' || state === 'drive' || state === 'horse' || state === 'soak';
 {
   const box = document.getElementById('set-mouselook');
   const set = (on) => { mouseLook.set(on); box.checked = on; };
@@ -601,7 +604,7 @@ const introPanel = () => touch.on ? showPanel('Hemu · 禾木', `
     <span><kbd>W</kbd></span><span>tuck for speed · push along on the flat</span>
     <span><kbd>S</kbd></span><span>skid to scrub speed</span>
     <span><kbd>Space</kbd></span><span>hold and release to ollie · spin in the air</span>
-    <span><kbd>E</kbd></span><span>board a lift at its station · take the pickup, the snowmobile or the Jetson ONE</span>
+    <span><kbd>E</kbd></span><span>board a lift at its station · take the pickup, the snowmobile or the Jetson ONE · ride the horse on the ridge past the ovoo</span>
     <span><kbd>Space</kbd><kbd>Shift</kbd></span><span>in the Jetson ONE: take off and climb / come down and land</span>
     <span><kbd>F</kbd></span><span>board / on foot with a walking rider · choose under Rider</span>
     <span><kbd>E</kbd><kbd>Q</kbd></span><span>pet <b>${DOG.en}</b> the sheepdog, up here with you · throw a snowball for it</span>
@@ -989,6 +992,11 @@ function frame() {
       kind: car.name, speed: Math.abs(drive.vel.dot(drive.forward(_f))), spool: drive.spool, load: drive.load,
       throttle: pedals.throttle || pedals.reverse || (car.flies && pedals.climb),
     });
+  } else if (state === 'horse') {
+    rideHorse(dt);
+    if (timing) elapsed += dt;
+    hud.update(phys, elapsed);
+    sound.update(horse.speed * 0.6, 0, false);
   } else if (state === 'soak') {
     if (goingIn) gettingIn(dt);
     else poseSoak(dt);
@@ -1014,7 +1022,7 @@ function frame() {
     sink = 0;
     collar.set(0);
   }
-  const onMountain =state === 'ride' || state === 'lift' || state === 'drive' || state === 'soak';
+  const onMountain = state === 'ride' || state === 'lift' || state === 'drive' || state === 'horse' || state === 'soak';
   if (onMountain && !bigMap.isOpen) {
     const ev = gps.update(dt, gpsFrom());
     if (ev?.type === 'arrived') hud.toast(`Arrived · ${ev.name}`, 2600);
@@ -1046,6 +1054,7 @@ function frame() {
   onsen.update(dt, time, state === 'soak' && (!goingIn || goingIn.wet) ? rider.root.position : null);
   updateDog(dt);
   updateFoxes(dt);
+  if (state !== 'horse') updateHorse(dt);
   updateWheels(dt);
   updateNpcs(dt);
   // The spout pouring into the pool, heard from 30 m off.
@@ -1065,7 +1074,7 @@ function frame() {
   updateWeatherPanel();
 
   // Normal-edge lines fade out by ~600 m, so far geometry can skip that pass.
-  post.render(scene, camera, time, [sky, weather.snowfall.points, spray.points, dog.spray.points, ...(foxes ? [foxes.spray.points] : []), specks.points, backdrop, ripples.group, ...forest.farMeshes, ...marks.hidden]);
+  post.render(scene, camera, time, [sky, weather.snowfall.points, spray.points, dog.spray.points, ...(foxes ? [foxes.spray.points] : []), ...(horse ? horse.sprays : []), specks.points, backdrop, ripples.group, ...forest.farMeshes, ...marks.hidden]);
   requestAnimationFrame(frame);
 }
 
@@ -1075,13 +1084,14 @@ function frame() {
 // lift only Skip. The button above them does what E would where you are, and
 // while the dog's about Throw, beside it, does what Q would.
 function touchLayout() {
-  const shown = touch.on && !bigMap.isOpen && !leaving && (state === 'ride' || state === 'drive' || state === 'lift' || state === 'soak');
+  const shown = touch.on && !bigMap.isOpen && !leaving && (state === 'ride' || state === 'drive' || state === 'horse' || state === 'lift' || state === 'soak');
   touch.show(shown);
   if (!shown) return;
   if (state === 'ride') {
     const walking = rider.locomotion === 'walk';
     const act = dialogue.open ? { label: 'Next', icon: 'talk', lit: true }
       : nearCar ? { label: nearCar.touch.enter, icon: 'in', lit: true }
+      : nearHorse ? { label: 'Ride', icon: 'in', lit: true }
       : nearPool ? { label: 'Soak', icon: 'in', lit: true }
         : nearDog ? { label: 'Pet', icon: 'paw', lit: true }
           : nearWheel ? { label: 'Turn', icon: 'wheel', lit: true }
@@ -1100,6 +1110,8 @@ function touchLayout() {
       low: car.flies ? 'down' : null,
       act: { label: car.touch.exit, icon: 'out', dim: car.phys.canExit === false },
     });
+  } else if (state === 'horse') {
+    touch.layout({ layout: 'drive', act: { label: 'Get off', icon: 'out', dim: horse.state !== 'ridden' } });
   } else if (state === 'soak') {
     touch.layout({ layout: 'lift', act: { label: 'Get out', icon: 'out' } });
   } else {
@@ -1137,10 +1149,11 @@ function respawnInPlace() {
 }
 
 // ---------- Lifts ----------
-let boardable = null, atHall = null, nearCar = null, nearPool = false, nearDog = false, dogAround = false, nearWheel = null;
+let boardable = null, atHall = null, nearCar = null, nearHorse = false, nearPool = false, nearDog = false, dogAround = false, nearWheel = null;
 function updateBoarding() {
   boardable = null;
   nearCar = null;
+  nearHorse = false;
   nearPool = false;
   nearDog = dogAround = false;
   nearWheel = null;
@@ -1150,12 +1163,13 @@ function updateBoarding() {
       const d = v.phys ? boxGap(v.model.footprint, phys.pos.x, phys.pos.z) : Infinity;
       if (d < bestD) { bestD = d; nearCar = v; }
     }
-    nearPool = !nearCar && onsen.near(phys.pos.x, phys.pos.z);
+    nearHorse = !nearCar && !!horse && phys.speed < 3 && horse.canMount(phys.pos);
+    nearPool = !nearCar && !nearHorse && onsen.near(phys.pos.x, phys.pos.z);
     if (nearPool) rider.preloadOutfit(SOAK_OUTFIT); // ready by the time you get in
-    nearDog = !nearCar && !nearPool && phys.speed < 3 && dog.canPet(phys.pos);
+    nearDog = !nearCar && !nearHorse && !nearPool && phys.speed < 3 && dog.canPet(phys.pos);
     dogAround = phys.speed < 3 && dog.canFetch(phys.pos) && phys.pos.distanceTo(dog.pos) < 15; // near enough to throw for, even right by it
     // Standing by a prayer wheel (walking past, the hand turns them anyway).
-    if (!nearCar && !nearPool && !nearDog && rider.locomotion === 'walk' && phys.speed < 0.5 && turnT <= 0) nearWheel = wheels.near(phys.pos, phys.forward(_face));
+    if (!nearCar && !nearHorse && !nearPool && !nearDog && rider.locomotion === 'walk' && phys.speed < 0.5 && turnT <= 0) nearWheel = wheels.near(phys.pos, phys.forward(_face));
   }
   if (phys.crashed <= 0 && phys.grounded) {
     let bestD = BOARD_REACH;
@@ -1170,6 +1184,7 @@ function updateBoarding() {
   atHall = hall;
   if (dialogue.open) hud.prompt(''); // the box says E itself
   else if (nearCar) hud.prompt(nearCar.prompt, nearCar.touch.prompt, pressE);
+  else if (nearHorse) hud.prompt('<kbd>E</kbd> ride the <b>horse</b>', 'Ride the <b>horse</b> ▸', pressE);
   else if (nearPool) hud.prompt('<kbd>E</kbd> soak in the <b>hot spring</b>', 'Soak in the <b>hot spring</b> ▸', pressE);
   else if (nearDog) hud.prompt(`<kbd>E</kbd> pet <b>${DOG.en}</b> · <kbd>Q</kbd> throw a snowball`, `Pet <b>${DOG.en}</b> ▸`, pressE);
   else if (nearWheel) hud.prompt('<kbd>E</kbd> turn the <b>prayer wheel</b>', 'Turn the <b>prayer wheel</b> ▸', pressE);
@@ -1345,6 +1360,162 @@ function updateFoxes(dt) {
   if (who) who.turn = phys.yawRate;
   foxes.update(dt, time, who, camera);
   for (const ev of foxes.events.splice(0)) if (ev.type === 'found' && find(FOX.id)) hud.toast(`Found: ${FOX.zh} · ${FOX.en}`, 3000);
+}
+
+// ---------- The horse ----------
+// An Altai horse, saddled and bridled, roams the ridge out past the ovoo (see
+// src/horse/horse.js): it grazes, wanders and stands about. Come near and it
+// looks up and walks over to you, stopping with its left side to you; E
+// beside it gets on (the rider climbs up into the saddle). Riding, W asks for
+// a faster gait (walk, trot, canter, gallop) and S a slower one, and it keeps
+// the gait it's asked for; holding S pulls it up. A/D steer it, round on the
+// spot when it's standing. E gets off: it pulls up and the rider climbs down
+// on its left, on foot if they walked up, on the board if not. It stays where
+// it was left.
+const pasture = horsePasture(resort.summitFrame);
+const horse = pasture && new Horse({ hf: detail, piste, forest, obstacles: phys.obstacles, lakes, home: pasture, rider });
+if (horse) {
+  scene.add(horse.root, horse.loose);
+  horse.ready.catch((err) => console.warn('The horse failed to load; it stays out of the game.', err));
+}
+let horseHelloT = -1e9; // when it last came over: its name, once in a while
+// Its hooves and breath heard from where the camera is, out to 50 m.
+const heard = (p) => 1 - THREE.MathUtils.smoothstep(camera.position.distanceTo(p), 4, 50);
+function horseEvent(ev) {
+  if (ev.type === 'hoof') sound.hoof(heard(ev.at) * ev.level, ev.powder);
+  if (ev.type === 'breath') sound.breath(heard(ev.at) * ev.level, ev.out);
+  if (ev.type === 'hello' && time - horseHelloT > 60) { hud.toast(`${HORSE.zh} · ${HORSE.en}`, 2000); horseHelloT = time; }
+  if (ev.type === 'mounting') startHop(); // from where they stood to beside it
+  if (ev.type === 'seated') {
+    horseT = 0;
+    hud.toast(touch.on ? 'Stick up: faster · down: slower' : 'W faster · S slower', 2200);
+  }
+  if (ev.type === 'dismounted') leaveHorse();
+}
+// Roaming, with you about on the snow (or nowhere).
+function updateHorse(dt) {
+  if (!horse) return;
+  horse.update(dt, time, forDog(), camera);
+  for (const ev of horse.events.splice(0)) horseEvent(ev);
+}
+function mountHorse() {
+  walkAfter = rider.locomotion === 'walk';
+  state = 'horse';
+  phys.vel.set(0, 0, 0);
+  phys.yawRate = phys.jumpCharge = phys.slip = 0;
+  trail.gap(phys.pos);
+  reins.up = reins.down = true; // a key still down from before doesn't count
+  reins.held = 0;
+  horse.beginMount(phys.pos);
+  hud.prompt('');
+}
+function getOffHorse() {
+  if (horse.state === 'ridden') horse.dismount();
+}
+// Round to where you get on, on foot (off the board, if you rode up), along
+// its left side or round its front or back; then up. A rider who can't walk
+// gets straight on.
+const _way = new THREE.Vector3();
+function walkRound(dt) {
+  if (rider.locomotion !== 'walk' && !rider.setLocomotion('walk')) { horse.mountNow(); return; }
+  acc += dt;
+  for (; acc >= STEP; acc -= STEP) {
+    const way = horse.wayRound(phys.pos, _way);
+    if (!way) { horse.mountNow(); acc = 0; return; }
+    const err = THREE.MathUtils.euclideanModulo(yawOf(way.x - phys.pos.x, way.z - phys.pos.z) - phys.yaw + Math.PI, Math.PI * 2) - Math.PI;
+    phys.yaw += THREE.MathUtils.clamp(err, -6 * STEP, 6 * STEP);
+    phys.stepWalk(STEP, { walk: Math.abs(err) < 1.2, run: false, steer: 0, brake: false });
+  }
+}
+// Down beside it: back on the snow, facing it.
+function leaveHorse() {
+  const at = rider.locomotion === 'walk' ? _c.copy(rider.root.position) : horse.standSpot(_c);
+  state = 'ride';
+  phys.reset(at.x, at.z, yawOf(horse.pos.x - at.x, horse.pos.z - at.z));
+  rider.setLocomotion(walkAfter ? 'walk' : 'ride');
+  poseRider(0, true);
+  hud.prompt('');
+  trail.gap(phys.pos);
+}
+// Riding: W and S (or the stick, up and down) ask for a gait faster or
+// slower, each press; S held pulls it up. A/D steer.
+const reins = { up: false, down: false, held: 0 };
+function rein(dt) {
+  if (horse.state !== 'ridden') {
+    reins.up = input.tuck;
+    reins.down = input.brake;
+    horse.reins.steer = 0;
+    horse.reins.brake = false;
+    return;
+  }
+  const was = horse.gear;
+  if (input.tuck && !reins.up) horse.shift(1);
+  if (input.brake && !reins.down) horse.shift(-1);
+  reins.up = input.tuck;
+  reins.down = input.brake;
+  reins.held = input.brake ? reins.held + dt : 0;
+  if (reins.held > 0.35) horse.gear = 0;
+  horse.reins.brake = reins.held > 0.35;
+  horse.reins.steer = input.steer;
+  if (horse.gear !== was) hud.toast(PACES[horse.gear].name.replace(/^./, (c) => c.toUpperCase()), 900);
+}
+let horseT = 0; // s in the saddle, for the touch screen's hint
+function rideHorse(dt) {
+  horseT += dt;
+  rein(dt);
+  horse.update(dt, time, null, camera);
+  for (const ev of horse.events.splice(0)) horseEvent(ev);
+  if (state !== 'horse') return; // got off
+  // On it (getting on, riding, getting off), the rider goes with the saddle;
+  // before that, they walk round to its left side.
+  if (horse.carrying && rider.locomotion === 'sit') {
+    horse.seat(dt, rider);
+    if (hop) hopping(dt);
+  } else {
+    if (horse.state === 'present') walkRound(dt);
+    poseRider(dt);
+    for (const ev of horse.events.splice(0)) horseEvent(ev);
+  }
+  if (horse.carrying) {
+    phys.pos.copy(horse.pos);
+    phys.vel.copy(horse.vel); // the HUD shows its speed over the ground
+    phys.yaw = yawOf(Math.sin(horse.yaw), Math.cos(horse.yaw));
+  }
+  updateHorseCamera(dt);
+  const riding = horse.state === 'ridden';
+  hud.prompt(riding ? '<kbd>W</kbd> faster · <kbd>S</kbd> slower, hold to stop · <kbd>A</kbd><kbd>D</kbd> steer · <kbd>E</kbd> get off' : '',
+    riding && horseT < 6 ? 'Stick up: faster · down: slower, hold to stop' : '');
+}
+// The camera on horseback: behind and above, looking at the rider's head and
+// on ahead, pulling back and widening as it speeds up. Standing, it hangs off
+// to the horse's left, the side you get on and off, and swings in behind as
+// it gets going.
+const HORSE_CAM = { back: 6.5, up: 3, ahead: 2.5, look: 2.3, side: -0.45 };
+function horseCameraTarget(out, look) {
+  const sp = Math.min(horse.speed, 12), p = portrait(), far = 1 + p * 0.5, c = HORSE_CAM;
+  _cd.copy(camDir).applyAxisAngle(Y_AXIS, c.side * (1 - THREE.MathUtils.smoothstep(sp, 1, 5)));
+  out.copy(horse.pos).addScaledVector(_cd, -(c.back * far + sp * 0.18));
+  out.y += c.up * far + sp * 0.05;
+  look.copy(horse.pos).addScaledVector(camDir, c.ahead * (1 + p * 0.6));
+  look.y += c.look;
+  if (mouseLook.yaw || mouseLook.pitch) {
+    _pv.copy(horse.pos).y += c.look;
+    swing(out, _pv, camDir, mouseLook.yaw, mouseLook.pitch);
+    swing(look, _pv, camDir, mouseLook.yaw, mouseLook.pitch);
+  }
+  out.y = Math.max(out.y, detail.heightAt(out.x, out.z) + 1.5);
+}
+function updateHorseCamera(dt) {
+  camDir.lerp(_v.set(Math.sin(horse.yaw), 0, Math.cos(horse.yaw)), 1 - Math.exp(-dt * 2.5)).normalize();
+  _pv.copy(horse.pos).y += HORSE_CAM.look;
+  swingCamera(_pv);
+  horseCameraTarget(_w, _look);
+  camera.position.lerp(_w, 1 - Math.exp(-dt * 5));
+  camera.position.y = Math.max(camera.position.y, detail.heightAt(camera.position.x, camera.position.z) + 1.2);
+  camLook.lerp(_look, 1 - Math.exp(-dt * 10));
+  camera.lookAt(camLook);
+  camera.fov = 60 + portrait() * 15 + Math.min(horse.speed, 12) * 0.6;
+  camera.updateProjectionMatrix();
 }
 
 // ---------- NPCs ----------
@@ -1962,7 +2133,7 @@ const minimapBtn = document.getElementById('minimap-open');
 minimapBtn.addEventListener('mousedown', (e) => e.preventDefault()); // keep Space for the ollie
 minimapBtn.addEventListener('click', () => openMap());
 function openMap() {
-  if (bigMap.isOpen || leaving || (state !== 'ride' && state !== 'lift' && state !== 'drive' && state !== 'soak')) return;
+  if (bigMap.isOpen || leaving || (state !== 'ride' && state !== 'lift' && state !== 'drive' && state !== 'horse' && state !== 'soak')) return;
   const at = whereabouts();
   bigMap.open(at, hud.place, phys.pos.y);
   minimapBtn.setAttribute('aria-expanded', 'true');
@@ -2024,7 +2195,7 @@ window.addEventListener('pageshow', (e) => {
 const RESUME_KEY = 'hemu-ski.resume';
 function keepResume() {
   try {
-    if (state === 'ride' || state === 'lift' || state === 'drive' || state === 'soak') sessionStorage.setItem(RESUME_KEY, JSON.stringify(whereabouts()));
+    if (state === 'ride' || state === 'lift' || state === 'drive' || state === 'horse' || state === 'soak') sessionStorage.setItem(RESUME_KEY, JSON.stringify(whereabouts()));
     else sessionStorage.removeItem(RESUME_KEY); // from the title, Back is the title again
   } catch {}
 }
@@ -2053,5 +2224,5 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { npcs, dialogue, phys, rider, camera, mouseLook, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, foxes, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { npcs, dialogue, phys, rider, camera, mouseLook, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, foxes, horse, mountHorse, getOffHorse, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
 requestAnimationFrame(frame);

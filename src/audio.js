@@ -1,8 +1,9 @@
 // Procedural sound: wind that rises with speed, a scrape for edge/skid, the
 // engine of the pickup or the snowmobile, or the Jetson ONE's rotors, the
 // hot spring's spout pouring into its pool, the dog: its bark, its whine,
-// its panting, and snowballs thrown for it, landing and bursting; and the
-// mantra chanted while the prayer wheels turn (mantra.js).
+// its panting, and snowballs thrown for it, landing and bursting; the horse's
+// hooves on the snow and its breathing; and the mantra chanted while the
+// prayer wheels turn (mantra.js).
 // Effects and music play through their own buses, switched from the menu.
 import { Mantra } from './mantra.js';
 
@@ -166,6 +167,48 @@ export class Sound {
   thud(level = 1) { if (this.ctx) this.#puff(this.ctx.currentTime, 0.09, 380, 0.3 * level, 'lowpass'); }
   // A snowball leaving the hand.
   swish(level = 1) { if (this.ctx) this.#puff(this.ctx.currentTime, 0.14, 2600, 0.06 * level, 'bandpass'); }
+  // A hoof coming down on the snow: a dull thump through the ground, and the
+  // snow's own sound over it, by how deep it is (`powder`, 0–1): packed snow
+  // on a run crunches, short and bright; powder gives a soft, muffled whump.
+  hoof(level = 1, powder = 0) {
+    if (!this.ctx || level <= 0.01) return;
+    const ctx = this.ctx, t = ctx.currentTime + Math.random() * 0.01;
+    const o = ctx.createOscillator();
+    o.frequency.setValueAtTime(105 - 25 * powder + Math.random() * 12, t);
+    o.frequency.exponentialRampToValueAtTime(48, t + 0.1);
+    o.connect(this.#envelope(t, 0.004, 0.12, 0.2 * level * (1 - 0.35 * powder))).connect(this.sfx);
+    o.start(t);
+    o.stop(t + 0.15);
+    if (powder < 0.95) this.#puff(t, 0.055, 2000 + Math.random() * 600, 0.07 * level * (1 - powder), 'bandpass');
+    if (powder > 0.05) this.#puff(t, 0.16, 520, 0.11 * level * powder, 'lowpass');
+  }
+  // A horse's breath, `out` or in: a deep, rough blow out through the
+  // nostrils (fluttering, the harder it blows) and a shorter, thinner draw in.
+  breath(level = 1, out = true) {
+    if (!this.ctx || level <= 0.01) return;
+    const ctx = this.ctx, t = ctx.currentTime + 0.005, dur = out ? 0.26 : 0.15;
+    const s = ctx.createBufferSource();
+    s.buffer = this.noiseBuf;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.Q.value = 1.1;
+    f.frequency.setValueAtTime(out ? 560 : 1100, t);
+    f.frequency.exponentialRampToValueAtTime(out ? 380 : 1400, t + dur);
+    const g = this.#envelope(t, out ? 0.03 : 0.05, dur, (out ? 0.16 : 0.06) * level);
+    const flutter = ctx.createGain();
+    flutter.gain.value = 1;
+    s.connect(f).connect(flutter).connect(g).connect(this.sfx);
+    if (out) {
+      const lfo = ctx.createOscillator(), depth = ctx.createGain();
+      lfo.frequency.value = 22 + Math.random() * 8;
+      depth.gain.value = 0.6 * level;
+      lfo.connect(depth).connect(flutter.gain);
+      lfo.start(t);
+      lfo.stop(t + dur + 0.05);
+    }
+    s.start(t, Math.random());
+    s.stop(t + dur + 0.05);
+  }
   // Panting, 0…1.
   setPant(level) {
     if (!this.ctx) return;

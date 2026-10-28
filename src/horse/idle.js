@@ -15,7 +15,7 @@ const { clamp, lerp, smoothstep } = THREE.MathUtils;
 const TAU = Math.PI * 2;
 
 // Mulberry32: a small seeded random, so a review run can be replayed.
-function random(seed) {
+export function random(seed) {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -27,7 +27,7 @@ function random(seed) {
 }
 
 // A value easing toward a target that's picked afresh every so often.
-class Drift {
+export class Drift {
   constructor(rand, lo, hi, every, ease) {
     Object.assign(this, { rand, lo, hi, every, ease });
     this.value = this.target = lerp(lo, hi, 0.5);
@@ -46,7 +46,7 @@ class Drift {
 
 // Something that happens now and then and lasts a while: `t` runs from 0 to
 // `length` while it does.
-class Every {
+export class Every {
   constructor(rand, every, length) {
     Object.assign(this, { rand, every, length });
     this.wait = lerp(every[0], every[1], rand());

@@ -41,6 +41,7 @@ export function riderScale(spec, trunk, box) {
 }
 const BOARD_TOP = 0.025;
 const FADE = 0.25;
+const _fade = new THREE.Quaternion();
 const loading = new Map();
 export function loadRiderModel(id = 'male', outfit = null) {
   const spec = RIDER_MODELS[id];
@@ -183,6 +184,11 @@ export class RiderModel {
       pivot: (pos('Spine').y - pos('Hips').y) * S,
       shoulder: [Math.abs(pos('LeftArm').x - pos('Hips').x) * S, (pos('LeftArm').y - pos('Spine').y) * S],
       reach: (this.upperArm + this.foreArm + this.palm) * S,
+      // Hip joint to ankle, straight, the ankle's height over the sole, and
+      // where the hip joint is from the hips (out, down).
+      leg: (this.thigh + this.shin) * S,
+      ankle: this.ankle.y * S,
+      hip: [Math.abs(pos('LeftUpLeg').x - pos('Hips').x) * S, (pos('Hips').y - pos('LeftUpLeg').y) * S],
     };
     // Each finger joint curls about the axis across its finger, toward the palm
     // (down, in the T-pose), kept in the joint's own frame. The thumb wraps
@@ -260,7 +266,9 @@ export class RiderModel {
       this.rest.forEach(({ bone }, i) => {
         const from = this.transition[i];
         bone.position.lerpVectors(from.p, bone.position, t);
-        bone.quaternion.slerpQuaternions(from.q, bone.quaternion, t);
+        // (Copied first: slerpQuaternions overwrites its own quaternion with the
+        // first before turning it toward the second.)
+        bone.quaternion.slerpQuaternions(from.q, _fade.copy(bone.quaternion), t);
         bone.scale.lerpVectors(from.s, bone.scale, t);
       });
       if (this.fade === FADE) this.transition = null;
@@ -406,6 +414,10 @@ export class RiderModel {
       const up = Math.sqrt(Math.max(0, this.thigh ** 2 - along ** 2));
       const bend = FWD.clone().addScaledVector(d, -FWD.dot(d));
       bend.x += sign * (rider.kneeOut ?? 0.12) + (rider.kneeShift ?? 0); // knees track slightly outward
+      // Seated, a foot can be well out to the side (in a stirrup, or finding
+      // one): keep the bend square to the leg there, or the knee lands off the
+      // circle it swings on and the foot misses its spot.
+      if (sitting) bend.addScaledVector(d, -bend.dot(d));
       bend.normalize();
       const knee = hip.clone().addScaledVector(d, along).addScaledVector(bend, up);
 

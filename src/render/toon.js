@@ -22,15 +22,27 @@ float tNoise(vec2 p) {
 
 // `piste` (with `snow`): the geometry has an aPiste attribute (across the run,
 // along it, how groomed: see world/terrain.js), and groomed snow gets corduroy.
+// `strands` (a skinned mesh): the geometry has an aStrand attribute (how far
+// down a lock of hair a vertex is, 0 off it … 1 at its end, and the lock's
+// phase), and the locks ripple in the wind, `mat.userData.strands.amount`
+// (object units at the end) and `.time` (s) set each frame: see horse/rig.js.
 export function makeToon(params = {}, opts = {}) {
-  const { hatch = 1, rim = 0, snow = 0, piste = 0 } = opts;
+  const { hatch = 1, rim = 0, snow = 0, piste = 0, strands = 0 } = opts;
   const mat = new THREE.MeshLambertMaterial(params);
   if (piste) mat.defines = { ...mat.defines, TOON_PISTE: '' };
+  if (strands) {
+    mat.defines = { ...mat.defines, TOON_STRANDS: '' };
+    mat.userData.strands = { amount: { value: 0 }, time: { value: 0 } };
+  }
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, toonUniforms);
     shader.uniforms.uHatch = { value: hatch };
     shader.uniforms.uRim = { value: rim };
     shader.uniforms.uSnow = { value: snow };
+    if (strands) {
+      shader.uniforms.uStrands = mat.userData.strands.amount;
+      shader.uniforms.uStrandTime = mat.userData.strands.time;
+    }
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -39,6 +51,27 @@ export function makeToon(params = {}, opts = {}) {
         #ifdef TOON_PISTE
           attribute vec3 aPiste;
           varying vec3 vPiste;
+        #endif
+        #ifdef TOON_STRANDS
+          attribute vec2 aStrand;
+          uniform float uStrands;
+          uniform float uStrandTime;
+        #endif`,
+      )
+      .replace(
+        '#include <skinning_vertex>',
+        `#include <skinning_vertex>
+        #if defined(TOON_STRANDS) && defined(USE_SKINNING)
+        {
+          // Ripples running down each lock, more toward its end, across it and
+          // in and out, each lock a little out of step with the next. The
+          // ways across and out are the rest pose's, carried round by the
+          // skinning, so they stay square to the hair however it hangs.
+          float a = aStrand.x * aStrand.x * uStrands, t = uStrandTime, d = aStrand.x * 9.0, ph = aStrand.y;
+          float across = sin(t * 31.0 - d + ph) + 0.5 * sin(t * 47.0 - 1.6 * d + 1.7 * ph);
+          float bulge = sin(t * 37.0 - 1.3 * d + 0.6 * ph + 1.0);
+          transformed += a * (across * (skinMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz + 0.6 * bulge * (skinMatrix * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
+        }
         #endif`,
       )
       .replace(
@@ -136,6 +169,6 @@ export function makeToon(params = {}, opts = {}) {
       );
   };
   // Distinct program cache key per option combination.
-  mat.customProgramCacheKey = () => `toon-${hatch}-${rim}-${snow}-${piste}`;
+  mat.customProgramCacheKey = () => `toon-${hatch}-${rim}-${snow}-${piste}-${strands}`;
   return mat;
 }

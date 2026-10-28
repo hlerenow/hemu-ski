@@ -3,9 +3,9 @@
 // game draws things, with a rider in the saddle or standing beside it. The
 // horse walks, trots, canters and gallops in place, the ground running under
 // it. The pose sliders turn a few bones on top of that, to check the weights
-// bend cleanly. The saddle is the Kazakh saddle model; the stirrups and reins
-// are placeholders (horse-tack.js) for checking the riding fit; the rider sits
-// through the game's own seated pose.
+// bend cleanly. The tack, the mount and the riding are the game's own
+// (src/horse/tack.js, mount.js, riding.js), with the review's measurements on
+// top (horse-tack.js); the rider sits through the game's own seated pose.
 //
 // Model frame: +z forward, +x the horse's left, +y up, hooves at y = 0, about
 // a unit from nose to tail.
@@ -16,7 +16,9 @@ import { makeToon } from '../../src/render/toon.js';
 import { Rider } from '../../src/player/rider.js';
 import { loadHorse, HorseRig, LEGS } from '../../src/horse/rig.js';
 import { HorseBody, GAIT_NAMES } from '../../src/horse/body.js';
-import { Tack, loadSaddle } from './horse-tack.js';
+import { Tack, loadSaddle, FIT as FITTED, STIRRUPS } from './horse-tack.js';
+import { Mount, seatRider } from '../../src/horse/mount.js';
+import { RidingMotion } from '../../src/horse/riding.js';
 
 const WITHERS = 0.63; // model units, measured off the mesh
 const GRID = 0.5; // metres between the ground's lines
@@ -65,27 +67,40 @@ const tack = new Tack(model, bones, rig.mesh, await loadSaddle());
 scene.add(...tack.reins);
 
 // ---- The rider, in the saddle or beside it ----
-// Standing, on the horse's right just behind its tail and facing the way it
-// does, so the side view shows both clear of the panel.
+// Standing on the horse's left, facing it, where a mount starts. Ticking
+// `mounted` plays the mount (horse-mount.js), with the horse made to stand
+// still for it; unticking it dismounts.
 const rider = new Rider();
 scene.add(rider.root);
 const mounted = document.getElementById('mounted'), showTack = document.getElementById('tack');
-function seatRider() {
+const idleBox = document.getElementById('idle');
+// Seated and not mounting, the rider rides (src/horse/riding.js); mounting
+// ends, and dismounting starts, as the rider sits there at rest.
+const riding = new RidingMotion();
+const mount = new Mount(rider, tack, () => riding.rest(tack.seat, rider.build));
+function beginMount(dir) {
   if (!rider.model) return;
-  if (mounted.checked) rider.setLocomotion('sit', tack.seat);
-  else {
-    rider.setLocomotion('walk');
-    rider.root.position.set(-0.9, 0, -1.7);
-    rider.root.rotation.set(0, Math.PI, 0); // her root faces -z
-  }
+  setSpeed(0);
+  idleBox.checked = false; // the saddle and stirrups keep still under the hands and feet
+  mount.begin(dir);
+}
+function placeRider() {
+  if (!rider.model) return;
+  if (mount.active) mount.dir = mounted.checked ? 1 : -1;
+  else if (mounted.checked) rider.setLocomotion('sit', tack.seat);
+  else mount.stand();
 }
 async function pickRider(id) {
   rider.root.visible = !!id;
   if (!id) return;
   await rider.selectModel(id);
-  seatRider();
+  placeRider();
 }
-mounted.onchange = seatRider;
+mounted.onchange = () => {
+  if (!rider.model) return;
+  const sitting = rider.locomotion === 'sit';
+  if (mount.active || mounted.checked !== sitting) beginMount(mounted.checked ? 1 : -1);
+};
 
 // ---- Gaits ----
 // Each gait at the speed it's made for (m/s); the slider goes between.
@@ -104,6 +119,14 @@ for (const [name, v] of Object.entries(SPEEDS)) {
   gaits.append(b);
 }
 gaits.append(speedLabel);
+// Turning, degrees a second to the horse's left (+) or right.
+let turning = 0;
+const turnLabel = document.createElement('label');
+turnLabel.innerHTML = 'turn °/s<input type="range" min="-60" max="60" step="1" value="0"><span>0</span>';
+const turnInput = turnLabel.querySelector('input'), turnOut = turnLabel.querySelector('span');
+turnInput.oninput = () => { turning = Number(turnInput.value); turnOut.textContent = turning.toFixed(0); };
+const setTurn = (v) => { turnInput.value = v; turnInput.oninput(); };
+gaits.append(turnLabel);
 
 // ---- Test poses ----
 // Each slider shares its angle (degrees) over a few bones, about one of the
@@ -172,16 +195,17 @@ for (const [name, values] of Object.entries(PRESETS)) {
 // Metres: the stirrups `drop` below the seat's cushion, `out` from the middle
 // and `ahead` of the hips; the hands `reach` ahead of the hips, `up` above the
 // cushion and `apart`; and how far the knees turn out round the barrel.
+// The game's fit (src/horse/tack.js) to start from.
 const FIT = {
-  drop: { min: 0.3, max: 0.8, step: 0.01, value: 0.55 },
-  // Narrower than about 0.42 at scale 2.6 and the legs run into the barrel.
-  out: { min: 0.2, max: 0.6, step: 0.01, value: 0.42 },
-  ahead: { min: -0.2, max: 0.3, step: 0.01, value: 0.08 },
-  reach: { min: 0.1, max: 0.6, step: 0.01, value: 0.32 },
-  up: { min: 0, max: 0.5, step: 0.01, value: 0.22 },
-  apart: { min: 0.05, max: 0.5, step: 0.01, value: 0.18 },
-  kneeOut: { min: 0, max: 2, step: 0.05, value: 0.9 },
+  drop: { min: 0.3, max: 0.8, step: 0.01 },
+  out: { min: 0.2, max: 0.6, step: 0.01 },
+  ahead: { min: -0.2, max: 0.3, step: 0.01 },
+  reach: { min: 0.1, max: 0.6, step: 0.01 },
+  up: { min: 0, max: 0.5, step: 0.01 },
+  apart: { min: 0.05, max: 0.5, step: 0.01 },
+  kneeOut: { min: 0, max: 2, step: 0.05 },
 };
+for (const key of Object.keys(FIT)) FIT[key].value = FITTED[key];
 const fit = {};
 const fitInputs = {};
 for (const [key, s] of Object.entries(FIT)) {
@@ -199,9 +223,6 @@ function setFit(values) {
     fitInputs[key].oninput();
   }
 }
-// Stirrup length to each rider's legs, as a real rider sets it: the knee
-// about 135° bent. The male sits higher on his cushion, so his hang shorter.
-const STIRRUPS = { female: 0.55, male: 0.5 };
 tack.fit(value.scale, fit);
 await pickRider('female');
 document.getElementById('rider').onchange = async (e) => {
@@ -242,7 +263,6 @@ const VIEWS = { side: [6.5, 0.9, 0], front: [0, 1.0, 6], three: [4.6, 2, 4.6], t
 for (const b of document.querySelectorAll('[data-view]')) b.onclick = () => { view = b.dataset.view; place(); };
 document.getElementById('pause').onclick = () => { paused = !paused; };
 const ink = document.getElementById('ink'), showBones = document.getElementById('bones');
-const idleBox = document.getElementById('idle');
 function place() {
   const [x, y, z] = VIEWS[view];
   // Back off for a bigger horse or a narrow space beside the panel.
@@ -253,7 +273,7 @@ function place() {
 }
 
 const status = document.getElementById('status');
-window.__horse = { scene, model, bones, rig, body, rider, tack, value, set, fit, setFit, setSpeed, PRESETS, camera, orbit };
+window.__horse = { THREE, scene, model, bones, rig, body, rider, tack, mount, beginMount, riding, setTurn, value, set, fit, setFit, setSpeed, PRESETS, camera, orbit };
 
 // The seated rider's legs: each knee's angle (180° straight, so the foot falls
 // short of its stirrup) and how far the leg runs into the horse.
@@ -269,7 +289,6 @@ function legs(scale) {
     return { knee, into: tack.legDepth(_h, _k, _f, LEG_RADIUS, scale) };
   });
 }
-const palms = [new THREE.Vector3(), new THREE.Vector3()];
 
 // The hooves on the ground: how fast each planted toe slides against the
 // ground running under it (m/s; 0 is a clean footfall), the worst over the
@@ -312,13 +331,16 @@ function frame(now) {
 }
 // One frame, `dt` s on. __horse.step runs it by hand when the page is hidden
 // and requestAnimationFrame stops.
+const playback = document.getElementById('playback');
 function step(dt) {
   if (paused) dt = 0;
+  dt *= Number(playback.value);
   elapsed += dt;
   const scale = value.scale;
   model.scale.setScalar(scale);
   body.scale = scale;
   body.speed = speed / scale;
+  body.turnRate = degToRad(turning);
   body.idling = idleBox.checked;
   body.update(dt);
   overlay();
@@ -329,19 +351,13 @@ function step(dt) {
   footwork(dt);
   const seat = tack.fit(scale, fit);
   for (const o of [tack.saddleMesh, tack.metres, ...tack.reins]) o.visible = showTack.checked;
-  const riding = rider.root.visible && rider.model && rider.locomotion === 'sit';
-  if (riding) {
-    // As the game seats a rider on the snowmobile: the root follows the saddle.
-    tack.turned.updateWorldMatrix(true, false);
-    tack.turned.matrixWorld.decompose(rider.root.position, rider.root.quaternion, _s);
-    rider.update(dt, { crouch: 0, lean: 0, twist: 0, air: false, speed: 0 });
-    rider.model.palmAt('Left', palms[0]);
-    rider.model.palmAt('Right', palms[1]);
-    tack.updateReins(palms);
-  } else if (rider.root.visible && rider.model) rider.update(dt, { crouch: 0.35, lean: 0, twist: 0, air: false, speed: 0 });
-  for (const r of tack.reins) r.visible &&= riding;
+  if (rider.model) mount.update(dt);
+  const seated = rider.root.visible && rider.model && rider.locomotion === 'sit';
+  if (seated) seatRider(dt, rider, { body, tack, mount, riding });
+  else if (rider.root.visible && rider.model) rider.update(dt, { crouch: 0.35, lean: 0, twist: 0, air: false, speed: 0 });
+  for (const r of tack.reins) r.visible &&= seated;
   let fitText = '';
-  if (riding) {
+  if (seated) {
     const [l, r] = legs(scale);
     fitText = `\ncushion ${seat.hips.y.toFixed(2)} m · stirrups ${(seat.feet[0].y - 0.025).toFixed(2)} m · fold ${THREE.MathUtils.radToDeg(rider.torso.rotation.x).toFixed(0)}°` +
       `\nknee L ${l.knee.toFixed(0)}° R ${r.knee.toFixed(0)}° · into horse L ${(l.into * 100).toFixed(0)} R ${(r.into * 100).toFixed(0)} cm`;
