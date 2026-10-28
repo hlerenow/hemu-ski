@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { makeToon } from '../render/toon.js';
 import { PISTE_HALF_WIDTH } from './data.js';
@@ -165,6 +165,31 @@ const BADGE = 6, BADGE_Y = 14, BADGE_Z = 5;
 // uses too).
 export { liftStations };
 
+// Polyfork's default model has 3.6 m rope spacing and an 8 m rope height.
+// Widen only its head and move the named sheave trains, preserving the mast.
+const PYLON_URL = `${import.meta.env.BASE_URL}models/lift-pylon/lift-pylon-no-sign-v03.glb`;
+const pylonToon = makeToon({ vertexColors: true }, { hatch: 0, rim: 0 });
+let pylonModel;
+function loadChairliftPylon() {
+  if (!pylonModel) pylonModel = new GLTFLoader().loadAsync(PYLON_URL).then(({ scene }) => {
+    const body = scene.getObjectByName('pylon');
+    const trains = ['train-l', 'train-r'].map(name => scene.getObjectByName(name));
+    if (!body?.geometry || trains.some(train => !train)) throw new Error('Unexpected lift pylon structure');
+    body.geometry = body.geometry.clone();
+    const positions = body.geometry.getAttribute('position');
+    for (let i = 0; i < positions.count; i++) {
+      if (positions.getY(i) >= 8.3) positions.setX(i, positions.getX(i) * (6 / 3.6));
+    }
+    positions.needsUpdate = true;
+    body.geometry.computeVertexNormals();
+    body.geometry.computeBoundingSphere();
+    for (const train of trains) train.position.x *= 6 / 3.6;
+    scene.traverse(node => { if (node.isMesh) { node.castShadow = true; node.receiveShadow = true; } });
+    return scene;
+  }).catch(error => { pylonModel = null; throw error; });
+  return pylonModel;
+}
+
 // `scale` sizes towers, cable height and cars; `stationScale` the buildings;
 // `spacing` multiplies the gap between cars; `speed` is the haul rope in m/s.
 // Besides the meshes it returns `lines` (each lift's cable from points[0] to the
@@ -179,6 +204,7 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
   const footprints = [];
   const collisionParts = [];
   const stations = [], badges = [];
+  const chairPylons = [];
   const towerGeo = mergeGeometries([
     new THREE.CylinderGeometry(0.35, 0.5, 1, 6).translate(0, 0.5, 0),
   ]);
@@ -244,10 +270,15 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
       }
       for (const p of path.supports.slice(1, -1)) {
         const ground = hf.heightAt(p.x, p.z);
-        place(towerMats, p.x, ground - 0.5, p.z, 0, scale, p.y - ground + 1);
-        // Keep the crossbeam above the grip; placing it at rope height made
-        // every passing chair clip through the solid tower arm.
-        place(armMats, p.x, p.y + 0.7 * scale, p.z, lineYaw, scale);
+        // Keep a separate fallback so it can be removed only after the model loads.
+        const fallback = new THREE.Group();
+        const post = new THREE.Mesh(towerGeo, mats.steel);
+        post.position.y = -0.5; post.scale.set(scale, p.y - ground + 1, scale);
+        const arm = new THREE.Mesh(armGeo, mats.dark);
+        arm.position.y = p.y - ground + 0.7 * scale;
+        arm.rotation.y = lineYaw; arm.scale.setScalar(scale);
+        fallback.add(post, arm); fallback.position.set(p.x, ground, p.z); group.add(fallback);
+        chairPylons.push({ fallback, x: p.x, z: p.z, ground, ropeHeight: p.y - ground, yaw: lineYaw });
         collisionParts.push({ x: p.x, z: p.z, yaw: 0, hw: 0.5 * scale, hd: 0.5 * scale, top: p.y + 0.5 * scale });
       }
       group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(path.points), mats.cable));
@@ -317,6 +348,50 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
       }
     }
   }
+
+  if (chairPylons.length) loadChairliftPylon().then(model => {
+    for (const pylon of chairPylons) {
+      const modelInstance = model.clone();
+      modelInstance.position.set(pylon.x, pylon.ground, pylon.z);
+      modelInstance.rotation.y = pylon.yaw;
+      // Extend the lower mast rather than stretching the wheels and tower head.
+      // The upper assembly moves rigidly; only the mast and ladder below it elongate.
+      const extension = pylon.ropeHeight / scale - 8;
+      const body = modelInstance.getObjectByName('pylon');
+      body.geometry = body.geometry.clone();
+      const vertices = body.geometry.getAttribute('position');
+      for (let i = 0; i < vertices.count; i++) {
+        const y = vertices.getY(i);
+        vertices.setY(i, y + extension * THREE.MathUtils.clamp((y - 1.1) / 3.9, 0, 1));
+      }
+      vertices.needsUpdate = true;
+      // Match the reviewed smooth Toon candidate after the height adjustment.
+      body.geometry.deleteAttribute('normal');
+      const smoothGeometry = mergeVertices(body.geometry, 0.0001);
+      body.geometry.dispose();
+      body.geometry = smoothGeometry;
+      body.geometry.computeVertexNormals();
+      body.geometry.computeBoundingSphere();
+      body.material = pylonToon;
+      for (const name of ['train-l', 'train-r']) modelInstance.getObjectByName(name).position.y += extension;
+      // The original ladder was merged into the mast mesh. Rebuild it at fixed
+      // rung spacing so tall supports do not stretch individual steps.
+      const ladderTop = 6.1 + extension;
+      const ladderParts = [];
+      for (const x of [-0.24, 0.24]) {
+        ladderParts.push(new THREE.BoxGeometry(0.045, ladderTop - 0.8, 0.045).translate(x, (ladderTop + 0.8) / 2, 0.4));
+      }
+      for (let y = 1; y < ladderTop; y += 0.32) {
+        ladderParts.push(new THREE.BoxGeometry(0.48, 0.035, 0.035).translate(0, y, 0.42));
+      }
+      const ladder = new THREE.Mesh(mergeGeometries(ladderParts), mats.steel);
+      ladder.castShadow = true;
+      modelInstance.add(ladder);
+      modelInstance.scale.setScalar(scale);
+      group.add(modelInstance);
+      group.remove(pylon.fallback);
+    }
+  }).catch(error => console.warn('Chairlift pylon unavailable; using fallback', error));
 
   const instanced = (geo, mat, count) => {
     const im = new THREE.InstancedMesh(geo, mat, count);
