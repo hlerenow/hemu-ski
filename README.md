@@ -339,6 +339,10 @@ under `npm run dev` or Node:
   (`/tools/review/forest.html`): fixed views along a run, over the treetops and
   across the valley, each with its draw calls, triangles and CPU and GPU frame
   times (`?only=forest` draws the forest alone).
+- `tools/model-sheet/`: model sheets of the two riders (`/tools/model-sheet/`;
+  [how to use it](tools/model-sheet/README.md)): orthographic views at one
+  scale with the game's shading and ink, height guides and their textures'
+  palette, saved as PNGs to give an image model as a reference.
 - `tools/trees/bake.mjs`: bakes the forest's trees from Cenji's winter pack
   into `public/models/trees/trees.glb` (see the README there).
 - `tests/`: `npm test` checks the female rider's animation, the falls and

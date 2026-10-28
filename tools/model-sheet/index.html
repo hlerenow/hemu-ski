@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rider model sheets</title>
+<style>
+body{margin:0;background:#d9e0e3;color:#1f2a33;font:14px system-ui}
+nav{position:sticky;top:0;z-index:1;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:10px 16px;background:#fffef6f0;border-bottom:1px solid #9aafb2}
+nav label{display:inline-flex;gap:5px;align-items:center;white-space:nowrap}
+#views{display:inline-flex;flex-wrap:wrap;gap:4px 10px}
+select,button{font:inherit;padding:5px 9px;border:1px solid #9aafb2;border-radius:5px;background:#fff;color:inherit}
+button{cursor:pointer}
+#status{font-size:12px;color:#4d5b63}
+main{padding:16px}
+canvas{display:block;max-width:100%;height:auto;margin:0 auto;box-shadow:0 1px 6px #0003}
+pre{margin:0 16px 24px;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap}
+</style>
+<nav>
+  <label>Sheet <select id="sheet"><option value="female">Female rider</option><option value="male">Male rider</option><option value="lineup">Both, side by side</option></select></label>
+  <span id="views"></span>
+  <label>Arms <select id="arms"><option value="t">T-pose</option><option value="a">A-pose</option><option value="bind">As modelled</option></select></label>
+  <label>Shading <select id="shading"><option value="toon">Game toon</option><option value="flat">Flat texture</option></select></label>
+  <label><input type="checkbox" id="ink" checked> Ink</label>
+  <label><input type="checkbox" id="guides" checked> Height guides</label>
+  <label><input type="checkbox" id="palette" checked> Palette</label>
+  <label>Background <input type="color" id="background" value="#eef1f2"></label>
+  <label>Scale <select id="scale"><option value="400">400 px/m</option><option value="600" selected>600 px/m</option><option value="900">900 px/m</option></select></label>
+  <button id="save-sheet">Save sheet PNG</button>
+  <button id="save-views">Save each view</button>
+  <span id="status">Loading the riders…</span>
+</nav>
+<main><canvas id="sheet-canvas" width="1" height="1"></canvas></main>
+<pre id="palette-text"></pre>
+<script type="module" src="./main.js"></script>
+</html>
