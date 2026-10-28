@@ -43,7 +43,12 @@ const BOARD_TOP = 0.025;
 const FADE = 0.25;
 const _fade = new THREE.Quaternion();
 const loading = new Map();
-let pitchingPromise;
+let pitchingPromise, idlePromise;
+export function loadIdle() {
+  idlePromise ||= new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'models/motions/weight-shift-idle-v01/weight-shift-idle-v01.glb')
+    .catch((err) => { idlePromise = null; throw err; });
+  return idlePromise;
+}
 export function loadPitching() {
   pitchingPromise ||= new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'models/motions/baseball-pitching-v01/baseball-pitching-v01.glb')
     .catch((err) => { pitchingPromise = null; throw err; });
@@ -81,7 +86,7 @@ export class RiderModel {
   // `outfit` names one of RIDER_MODELS[id].outfits, sized to `fit`: the
   // RiderModel of the rider's own clothes. `borrow`: the loaded model of the
   // rider's `walkFrom`, if it has one.
-  constructor(gltf, id = 'male', { outfit = null, fit = null, borrow = null, pitching = null } = {}) {
+  constructor(gltf, id = 'male', { outfit = null, fit = null, borrow = null, pitching = null, idle = null } = {}) {
     const spec = RIDER_MODELS[id], wearing = outfit ? spec.outfits[outfit] : spec;
     const scene = clone(gltf.scene);
     scene.traverse((o) => {
@@ -143,6 +148,8 @@ export class RiderModel {
     };
     this.walk = own('walk.001') ?? borrowed('walk.001');
     this.run = own('run.001') ?? borrowed('run.001');
+    this.idle = idle?.animations[0] ? this.mixer.clipAction(retarget(idle.animations[0], idle.scene, gltf.scene)).play() : null;
+    this.idleWeight = this.idle ? 1 : 0;
     this.canWalk = !!(this.walk && this.run);
     if (this.canWalk) {
       this.walk = this.mixer.clipAction(this.walk).play();
@@ -255,6 +262,7 @@ export class RiderModel {
       for (const a of this.acts.values()) if (a !== action) a.stop();
       this.walk?.setEffectiveWeight?.(0);
       this.run?.setEffectiveWeight?.(0);
+      this.idle?.setEffectiveWeight(0);
       action.play();
       action.time = THREE.MathUtils.clamp(rider.act.time, 0, clip.duration);
       this.mixer.update(0);
@@ -262,9 +270,12 @@ export class RiderModel {
     } else if (mode === 'walk' && this.canWalk) {
       for (const a of this.acts.values()) a.stop();
       const blend = THREE.MathUtils.smoothstep(speed, 1.5, 4);
-      this.walk.setEffectiveWeight(1 - blend);
-      this.run.setEffectiveWeight(blend);
-      // Hold the current walk frame when stopped; the asset has no idle clip.
+      const targetIdle = this.idle ? 1 - THREE.MathUtils.smoothstep(speed, 0.05, 0.35) : 0;
+      this.idleWeight = THREE.MathUtils.damp(this.idleWeight, targetIdle, 10, dt);
+      this.idle?.setEffectiveWeight(this.idleWeight);
+      this.walk.setEffectiveWeight((1 - this.idleWeight) * (1 - blend));
+      this.run.setEffectiveWeight((1 - this.idleWeight) * blend);
+      // If the idle asset is unavailable, retain the last walk frame.
       this.walk.setEffectiveTimeScale(speed < 0.05 ? 0 : THREE.MathUtils.clamp(speed / 1.4, 0.25, 1.5));
       this.run.setEffectiveTimeScale(speed < 0.05 ? 0 : THREE.MathUtils.clamp(speed / 4, 0.25, 1.5));
       this.mixer.update(dt);

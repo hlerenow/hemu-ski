@@ -50,6 +50,18 @@ try {
   rider.feet[0].position.set(0.26, 0.025, 0);
   rider.feet[1].position.set(-0.26, 0.025, 0);
 
+  const idleAsset = await load('motions/weight-shift-idle-v01/weight-shift-idle-v01.glb');
+  assert.equal(idleAsset.animations.length, 1);
+  const idleModel = new RiderModel(gltf, 'female', { idle: idleAsset });
+  for (let i = 0; i < 120; i++) idleModel.update(1 / 60, rider, 'walk', 0);
+  assert(idleModel.idle.getEffectiveWeight() > 0.99, 'standing uses idle');
+  const idleTime = idleModel.idle.time;
+  idleModel.update(1 / 60, rider, 'walk', 0);
+  assert.notEqual(idleModel.idle.time, idleTime, 'idle continues animating while stopped');
+  for (let i = 0; i < 120; i++) idleModel.update(1 / 60, rider, 'walk', 2);
+  assert(idleModel.idle.getEffectiveWeight() < 0.01, 'movement blends out idle');
+  console.log('PASS standing idle advances and blends into walking');
+
   const model = new RiderModel(gltf, 'female');
   assert.equal(model.canWalk, true, 'actual female asset must provide both walk and run');
   const frames = (mode, speed, count = 60, subject = model) => {

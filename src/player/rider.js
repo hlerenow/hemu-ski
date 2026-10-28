@@ -214,10 +214,10 @@ export class Rider {
     if (id !== 'classic') {
       if (!this.models.has(id)) {
         this.models.set(id, import('./rider-model.js')
-          .then(async ({ RIDER_MODELS, loadRiderModel, loadPitching, RiderModel }) => {
+          .then(async ({ RIDER_MODELS, loadRiderModel, loadPitching, loadIdle, RiderModel }) => {
             const from = RIDER_MODELS[id].walkFrom;
-            const [gltf, borrow, pitching] = await Promise.all([loadRiderModel(id), from && loadRiderModel(from), loadPitching().catch((err) => { console.warn('Pitching animation unavailable; using procedural throw.', err); return null; })]);
-            return new RiderModel(gltf, id, { borrow, pitching });
+            const [gltf, borrow, pitching, idle] = await Promise.all([loadRiderModel(id), from && loadRiderModel(from), loadPitching().catch((err) => { console.warn('Pitching animation unavailable; using procedural throw.', err); return null; }), loadIdle().catch((err) => { console.warn('Idle animation unavailable.', err); return null; })]);
+            return new RiderModel(gltf, id, { borrow, pitching, idle });
           })
           .catch((err) => { this.models.delete(id); throw err; }));
       }
@@ -291,13 +291,14 @@ export class Rider {
     if (!entry) {
       entry = { model: null };
       entry.promise = import('./rider-model.js')
-        .then(async ({ RIDER_MODELS, loadRiderModel, loadPitching, RiderModel }) => {
+        .then(async ({ RIDER_MODELS, loadRiderModel, loadPitching, loadIdle, RiderModel }) => {
           if (!RIDER_MODELS[id].outfits?.[outfit]) return null;
-          const [gltf, pitching] = await Promise.all([
+          const [gltf, pitching, idle] = await Promise.all([
             loadRiderModel(id, outfit),
             loadPitching().catch((err) => { console.warn('Pitching animation unavailable; using procedural throw.', err); return null; }),
+            loadIdle().catch((err) => { console.warn('Idle animation unavailable.', err); return null; }),
           ]);
-          entry.model = new RiderModel(gltf, id, { outfit, fit: base, pitching });
+          entry.model = new RiderModel(gltf, id, { outfit, fit: base, pitching, idle });
           return entry.model;
         })
         .catch((err) => { console.warn(`No ${outfit} outfit for the ${id} rider; keeping their own clothes.`, err); return null; });
