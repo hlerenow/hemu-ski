@@ -361,7 +361,7 @@ function act(code, repeat = false) {
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearDog) petDog();
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearWheel) turnWheel(nearWheel);
   else if (code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
-  else if ((code === 'KeyE' || code === 'Space') && state === 'lift' && liftRide.t > 0.5) { if (liftRide.system) { if (!liftRide.waiting) liftRide.system.targetSpeed = 20; } else liftRide.t = liftRide.dur; }
+  else if ((code === 'KeyE' || code === 'Space') && state === 'lift' && liftRide.t > 0.5) { if (liftRide.system) { if (!liftRide.waiting) liftRide.system.targetSpeed = 20; } else if (liftRide.gondolaSystem) unload(liftRide.ride); else liftRide.t = liftRide.dur; }
   if ((code === 'Enter' || code === 'Space') && panelNext) { const f = panelNext; panelNext = null; f(); }
 }
 const pressE = () => { sound.start(); act('KeyE'); }; // a tapped prompt
@@ -1296,10 +1296,24 @@ const _c = new THREE.Vector3();
 function board(ride) {
   const system = lifts.chairSystems.find(s => s.id === ride.id);
   if (system) { boardChair(ride, system); return; }
+  const gondolaSystem = lifts.gondolaSystems.find(s => s.id === ride.id);
   restoreRide();
   state = 'lift';
   // Sped up: 1–2 km of cable in 10–22 s.
   liftRide = { ride, t: 0, dur: THREE.MathUtils.clamp(ride.length / 110, 10, 22) };
+  if (gondolaSystem) {
+    lifts.update(0);
+    // Bring the next cabin round to the boarding point under the canopy.
+    const { path } = gondolaSystem;
+    const toBoarding = (c) => ((path.boarding - c.distance) % path.total + path.total) % path.total;
+    const car = gondolaSystem.cars.reduce((a, b) => toBoarding(b) < toBoarding(a) ? b : a);
+    gondolaSystem.phase = (gondolaSystem.phase + toBoarding(car)) % path.total;
+    lifts.update(0);
+    gondolaSystem.passenger = car;
+    gondolaSystem.speed = gondolaSystem.targetSpeed = ride.length / liftRide.dur;
+    Object.assign(liftRide, { gondolaSystem, car, previous: car.distance });
+    lifts.update(0);
+  }
   rider.root.visible = false;
   cabin.visible = true;
   cabin.setLine(ride.label);
@@ -1315,11 +1329,18 @@ function updateLift(dt) {
   const L = liftRide, { ride } = L;
   if (L.system) { updateChairRide(dt); return; }
   L.t = Math.min(L.dur, L.t + dt);
-  const u = L.t / L.dur;
-  const s = (u - Math.sin(u * Math.PI * 2) / (Math.PI * 2)) * ride.length; // eased start and stop
-  let i = 1;
-  while (i < ride.acc.length - 1 && ride.acc[i] < s) i++;
-  cabin.position.lerpVectors(ride.cable[i - 1], ride.cable[i], (s - ride.acc[i - 1]) / (ride.acc[i] - ride.acc[i - 1]));
+  if (L.gondolaSystem) {
+    cabin.position.copy(L.car.position);
+    cabin.rotation.y = L.car.yaw;
+    if (crossedChairliftPoint(L.previous, L.car.distance, L.gondolaSystem.path.upLength, L.gondolaSystem.path.total)) { unload(ride); return; }
+    L.previous = L.car.distance;
+  } else {
+    const u = L.t / L.dur;
+    const s = (u - Math.sin(u * Math.PI * 2) / (Math.PI * 2)) * ride.length; // eased start and stop
+    let i = 1;
+    while (i < ride.acc.length - 1 && ride.acc[i] < s) i++;
+    cabin.position.lerpVectors(ride.cable[i - 1], ride.cable[i], (s - ride.acc[i - 1]) / (ride.acc[i] - ride.acc[i - 1]));
+  }
   cabin.rotation.z = Math.sin(L.t * 1.3) * 0.02;
   phys.pos.copy(cabin.position);
   // Camera off the cabin's flank, looking up the line past it.
@@ -1333,7 +1354,7 @@ function updateLift(dt) {
   camera.lookAt(camLook);
   camera.fov = 58 + portrait() * 12;
   camera.updateProjectionMatrix();
-  if (L.t >= L.dur) unload(ride);
+  if (!L.gondolaSystem && L.t >= L.dur) unload(ride);
 }
 
 // Seat coordinates are in Rider's body frame. Both Mixamo riders use the same
@@ -1470,6 +1491,10 @@ function unloadChair(ride, chair, system) {
 
 // Step off at the top station onto the best open snow nearby, facing downhill.
 function unload(ride) {
+  if (liftRide?.gondolaSystem) {
+    liftRide.gondolaSystem.passenger = null;
+    liftRide.gondolaSystem.speed = liftRide.gondolaSystem.targetSpeed = 5;
+  }
   restoreRide();
   const P = ride.top;
   const at = topSpot(ride);

@@ -5,6 +5,7 @@ import { makeToon } from '../render/toon.js';
 import { PISTE_HALF_WIDTH } from './data.js';
 import { liftStations } from './stations.js';
 import { chairliftPath, sampleChairlift, advanceChairlift } from './chairlift-path.js';
+import { MODERN_GONDOLAS, gondolaLayout, gondolaLoop, sheavePitch, offPisteSites } from './gondola-path.js';
 
 const mats = {
   steel: makeToon({ color: '#9aa3a6' }),
@@ -194,12 +195,15 @@ function loadChairliftPylon() {
 // `spacing` multiplies the gap between cars; `speed` is the haul rope in m/s.
 // Besides the meshes it returns `lines` (each lift's cable from points[0] to the
 // far end, for riding it, with the lift's OSM `id`) and `footprints` (station
-// boxes, for collisions, with the height of their roofs as `top`).
-export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacing: gap = 1, speed = 5 } = {}) {
+// boxes, for collisions, with the height of their roofs as `top`). With `piste`
+// (the runs' PisteField), the towers of gondolas 6 and 7 keep off the runs;
+// `approach` is how they leave their graded stations (see loadResort).
+export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacing: gap = 1, speed = 5, piste = null, approach = null } = {}) {
   const group = new THREE.Group();
   const movers = [];
   const belts = [];
   const chairSystems = [];
+  const gondolaSystems = [];
   const lines = [];
   const footprints = [];
   const collisionParts = [];
@@ -294,6 +298,54 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
       continue;
     }
 
+    // Gondolas No. 6 and No. 7: one detachable loop each, running into the
+    // stations, on towers off the runs (see gondola-path.js).
+    if (isGondola && MODERN_GONDOLAS.includes(lift.name)) {
+      const offPiste = piste ? offPisteSites(piste, PISTE_HALF_WIDTH) : undefined;
+      const layout = gondolaLayout(hf, A, B, { scale, stationScale, offPiste, approach });
+      for (const end of layout.ends) {
+        const st = new THREE.Group();
+        st.add(station(14, 18, 7));
+        st.scale.setScalar(stationScale);
+        st.position.set(end.P.x, end.base, end.P.z);
+        // The model's open back (-z) faces the line: see STATION.
+        st.rotation.y = Math.atan2(end.out.x, end.out.z) + Math.PI;
+        group.add(st);
+        stations.push(st);
+        if (badge) {
+          const sign = new THREE.Sprite(badge);
+          sign.scale.setScalar(BADGE);
+          sign.position.set(0, BADGE_Y, -BADGE_Z);
+          st.add(sign);
+          badges.push(sign);
+        }
+        footprints.push({ x: end.P.x, z: end.P.z, yaw, hw: 7 * stationScale, hd: 9 * stationScale, top: end.base + 12 * stationScale });
+      }
+      const pts = layout.supports;
+      for (let i = 1; i < pts.length - 1; i++) {
+        const p = pts[i], ground = hf.heightAt(p.x, p.z);
+        const fallback = new THREE.Group();
+        const post = new THREE.Mesh(towerGeo, mats.steel);
+        post.position.y = -0.5; post.scale.set(scale, p.y - ground + 1, scale);
+        const arm = new THREE.Mesh(armGeo, mats.dark);
+        arm.position.y = p.y - ground + 0.3 * scale; arm.rotation.y = yaw; arm.scale.setScalar(scale);
+        fallback.add(post, arm); fallback.position.set(p.x, ground, p.z); group.add(fallback);
+        chairPylons.push({ fallback, x: p.x, z: p.z, ground, ropeHeight: p.y - ground, yaw, pitch: sheavePitch(pts, i) });
+        collisionParts.push({ x: p.x, z: p.z, yaw: 0, hw: 0.5 * scale, hd: 0.5 * scale, top: p.y + 0.5 * scale });
+      }
+      const path = gondolaLoop(layout, scale);
+      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(path.points), mats.cable));
+      const system = { id: lift.id, path, phase: 0, speed, targetSpeed: speed, cars: [], passenger: null };
+      const count = Math.max(2, Math.round(path.total / (55 * gap)));
+      for (let i = 0; i < count; i++) {
+        const car = { kind: paint, system, offset: i * path.total / count, position: new THREE.Vector3(), tangent: new THREE.Vector3(), yaw };
+        movers.push(car); system.cars.push(car);
+      }
+      gondolaSystems.push(system);
+      lines.push({ id: lift.id, name: lift.name, type: lift.type, a: path.bottom.P, b: path.top.P, cable: path.up });
+      continue;
+    }
+
     for (const [P, flip] of [[A, 0], [B, Math.PI]]) {
       const st = new THREE.Group();
       st.add(station(14, 18, 7));
@@ -373,7 +425,15 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
       body.geometry.computeVertexNormals();
       body.geometry.computeBoundingSphere();
       body.material = pylonToon;
-      for (const name of ['train-l', 'train-r']) modelInstance.getObjectByName(name).position.y += extension;
+      for (const name of ['train-l', 'train-r']) {
+        const train = modelInstance.getObjectByName(name);
+        train.position.y += extension;
+        const pitch = pylon.pitch || 0;
+        train.rotation.x = pitch;
+        // Rotate around the rope contact height, not the beam's higher origin.
+        train.position.y += 0.205 * (Math.cos(pitch) - 1);
+        train.position.z += 0.205 * Math.sin(pitch);
+      }
       // The original ladder was merged into the mast mesh. Rebuild it at fixed
       // rung spacing so tall supports do not stretch individual steps.
       const ladderTop = 6.1 + extension;
@@ -437,16 +497,18 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
     footprints,
     collisionParts,
     chairSystems,
+    gondolaSystems,
     update(dt, chairDt = dt) {
       for (const b of belts) b.tex.offset.y = (b.tex.offset.y - dt * b.rate) % 1;
       for (const system of chairSystems) {
         advanceChairlift(system, chairDt);
       }
+      for (const system of gondolaSystems) advanceChairlift(system, chairDt);
       for (const m of movers) {
         if (m.system) {
           m.distance = sampleChairlift(m.system.path, m.system.phase + m.offset, m.position, m.tangent);
           m.yaw = Math.atan2(m.tangent.x, m.tangent.z);
-          _o.position.copy(m.position); _o.rotation.set(0, m.yaw, 0); _o.scale.setScalar(scale); _o.updateMatrix();
+          _o.position.copy(m.position); _o.rotation.set(0, m.yaw, 0); _o.scale.setScalar(m.system.passenger === m ? 0 : scale); _o.updateMatrix();
           m.mesh.setMatrixAt(m.index, _o.matrix);
           continue;
         }
