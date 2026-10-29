@@ -298,6 +298,24 @@ export class RiderModel {
         const spread = new THREE.Quaternion().setFromAxisAngle(axis, -sign * 0.16);
         bone.quaternion.premultiply(parent.clone().invert().multiply(spread).multiply(parent));
         bone.updateWorldMatrix(false, true);
+
+        // The source was authored on a bench without a footrest. Lower each
+        // animated ankle beneath the chair's front bar, retaining its motion
+        // and the source knee's bend direction via two-bone IK.
+        const hip = this.#modelPos(side + 'UpLeg', new THREE.Vector3());
+        const knee = this.#modelPos(side + 'Leg', new THREE.Vector3());
+        const ankle = this.#modelPos(side + 'Foot', new THREE.Vector3())
+          .add(new THREE.Vector3(0, -0.17 / this.scale, -0.08 / this.scale));
+        const d = ankle.clone().sub(hip);
+        const len = Math.min(d.length(), this.thigh + this.shin - 1e-4);
+        d.normalize();
+        const along = (this.thigh ** 2 - this.shin ** 2 + len ** 2) / (2 * len);
+        const bend = knee.clone().sub(hip).addScaledVector(d, -knee.clone().sub(hip).dot(d)).normalize();
+        const targetKnee = hip.clone().addScaledVector(d, along)
+          .addScaledVector(bend, Math.sqrt(Math.max(0, this.thigh ** 2 - along ** 2)));
+        this.#aim(side + 'UpLeg', hip, knee, targetKnee.sub(hip).normalize());
+        const nextKnee = this.#modelPos(side + 'Leg', new THREE.Vector3());
+        this.#aim(side + 'Leg', nextKnee, this.#modelPos(side + 'Foot', new THREE.Vector3()), d.multiplyScalar(len).add(hip).sub(nextKnee).normalize());
       }
     } else if (mode === 'act') {
       const action = this.#act(this.mixer, clip, this.acts);

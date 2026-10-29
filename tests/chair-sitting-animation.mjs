@@ -28,6 +28,32 @@ try {
   for(let i=0;i<35;i++) rider.update(1/60,state);
   assert(a.some((p,i)=>p.distanceTo(rider.feet[i].position)>.025),'feet and attached skis follow kick');
   assert(rider.model.bones.Hips.bone.position.distanceTo(rider.model.bones.Hips.p)>0.01,'hips use seat anchor');
+
+  // Use the same scaled, grip-centred mesh and rider placement as the actual
+  // lift. Sample lines across the skis' width and thickness over a full cycle.
+  const chairGltf=await load('public/models/lifts/chair.glb');
+  chairGltf.scene.updateMatrixWorld(true); let mesh;
+  chairGltf.scene.traverse(o=>{if(o.isMesh&&!mesh)mesh=o;});
+  const geometry=mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+  geometry.computeBoundingBox(); const {min,max}=geometry.boundingBox;
+  const scale=3/(max.y-min.y),cut=(max.y-(max.y-min.y)*.05)*scale;
+  geometry.scale(scale,scale,scale);
+  const lo=new THREE.Vector3(Infinity,Infinity,Infinity),hi=lo.clone().negate(),v=new THREE.Vector3(),pos=geometry.attributes.position;
+  for(let i=0;i<pos.count;i++){v.fromBufferAttribute(pos,i);if(v.y>=cut){lo.min(v);hi.max(v);}}
+  geometry.translate(-(lo.x+hi.x)/2,-(lo.y+hi.y)/2,-(lo.z+hi.z)/2);
+  const chairMesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));
+  const scene=new THREE.Group();scene.add(chairMesh,rider.root);rider.root.position.set(.55,-2.25,.08);rider.root.rotation.y=Math.PI;rider.body.rotation.y=Math.PI;
+  rider.model.chair.action.reset().play();rider.update(0,state);
+  const ray=new THREE.Raycaster();
+  for(let frame=0;frame<120;frame++){
+    rider.update(chair.animations[0].duration*2/120,state);scene.updateMatrixWorld(true);
+    for(const ski of rider.skis)for(const x of [-.05,0,.05])for(const y of [-.035,-.015,.005]){
+      const start=ski.localToWorld(new THREE.Vector3(x,y,-.68)),end=ski.localToWorld(new THREE.Vector3(x,y,.68));
+      const d=end.clone().sub(start);ray.set(start,d.clone().normalize());ray.far=d.length();
+      assert.equal(ray.intersectObject(chairMesh).length,0,`ski crosses chair at sampled frame ${frame}`);
+    }
+  }
+  console.log('PASS sampled ski clearance against actual chair mesh through the full loop');
   rider.setGear('board');rider.update(1/60,state);assert.equal(rider.model.chairActive,false,'snowboard keeps existing sit');
   rider.setGear('ski');seat.chairAnimation=false;rider.update(1/60,state);assert.equal(rider.model.chairActive,false,'other seats keep existing sit');
   rider.setLocomotion('ride');for(let i=0;i<30;i++)rider.update(1/60,state);assert.equal(rider.model.chairActive,false,'leaving chair stops animation');
