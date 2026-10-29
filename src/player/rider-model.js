@@ -136,7 +136,7 @@ export class RiderModel {
     for (const entry of this.rest) entry.animated = this.animationScene.getObjectByName(entry.bone.name);
     this.mixer = new THREE.AnimationMixer(this.animationScene);
     this.chair = null;
-    if (chair?.animations[0]) {
+    if (chair?.animations?.[0]) {
       const scene = clone(gltf.scene);
       const mixer = new THREE.AnimationMixer(scene);
       const clip = retarget(chair.animations[0], chair.scene, this.bindScene);
@@ -147,7 +147,7 @@ export class RiderModel {
     // A separate target and mixer let the throw blend over the walk without
     // disrupting the walk mixer's cached property values.
     this.pitching = null;
-    if (pitching?.animations[0]) {
+    if (pitching?.animations?.[0]) {
       const pitchScene = clone(gltf.scene);
       const pitchClip = retarget(pitching.animations[0], pitching.scene, gltf.scene);
       const pitchMixer = new THREE.AnimationMixer(pitchScene);
@@ -158,12 +158,12 @@ export class RiderModel {
     }
     const own = (name) => gltf.animations.find((clip) => clip.name === name);
     const borrowed = (name) => {
-      const clip = borrow?.animations.find((c) => c.name === name);
+      const clip = borrow?.animations?.find((c) => c.name === name);
       return clip && retarget(clip, borrow.scene, gltf.scene);
     };
     this.walk = own('walk.001') ?? borrowed('walk.001');
     this.run = own('run.001') ?? borrowed('run.001');
-    this.idle = idle?.animations[0] ? this.mixer.clipAction(retarget(idle.animations[0], idle.scene, gltf.scene)).play() : null;
+    this.idle = idle?.animations?.[0] ? this.mixer.clipAction(retarget(idle.animations[0], idle.scene, gltf.scene)).play() : null;
     this.idleWeight = this.idle ? 1 : 0;
     this.canWalk = !!(this.walk && this.run);
     if (this.canWalk) {
