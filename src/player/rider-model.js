@@ -126,6 +126,7 @@ export class RiderModel {
     });
     // Keep mixer targets separate: PropertyMixer caches unchanged track values.
     // Fading on its target bones would leave a frozen clip stuck halfway.
+    this.bindScene = clone(gltf.scene); // Never animated: stable reference for retargeting.
     this.animationScene = clone(gltf.scene);
     for (const entry of this.rest) entry.animated = this.animationScene.getObjectByName(entry.bone.name);
     this.mixer = new THREE.AnimationMixer(this.animationScene);

@@ -625,3 +625,9 @@ body.touch #bigmap .zoom { gap: 8px; }
 body.touch #bigmap .zoom button { width: 44px; height: 44px; }
 body.touch #bigmap .acts button { min-height: 48px; }
 body.touch #bigmap .dest .clear { min-height: 36px; }
+
+/* The action library scrolls within the viewport on short and touch screens. */
+#fly-actions .action-body { max-height: min(65dvh, 540px); overflow-y: auto; overscroll-behavior: contain; }
+#menu .action-shortcuts { display: grid; gap: 6px; margin-bottom: 10px; }
+#menu .action-shortcuts label { display: flex; align-items: center; gap: 8px; }
+#menu .action-shortcuts select { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--ink); background: white; border: 2px solid var(--ink); }

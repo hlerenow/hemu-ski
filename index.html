@@ -72,6 +72,13 @@
             <rect fill="#f0c24a" x="8" y="9.4" width="8" height="2.8" rx="1.3" />
           </svg>
         </button>
+        <button class="mi" data-flyout="actions" data-tip="Actions" aria-label="Actions" aria-expanded="false" aria-controls="fly-actions">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle fill="#f3d6bd" cx="12" cy="5" r="2.5" />
+            <path d="M12 8v6m0-4-4 3-3-2m7-1 4 2 3-4m-7 6-4 6m4-6 4 6" />
+            <path stroke="#d9534a" d="M19 3v2m-1-1h2" />
+          </svg>
+        </button>
         <button class="mi" data-flyout="outfit" data-tip="Outfit &amp; gear" aria-label="Outfit &amp; gear" aria-expanded="false" aria-controls="fly-outfit">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path fill="#d9534a" d="M9 3.5 5.5 5l-3 6 3 1.5L7 10v10.5h10V10l1.5 2.5 3-1.5-3-6L15 3.5c-.5 1.6-1.6 2.5-3 2.5s-2.5-.9-3-2.5z" />
@@ -123,6 +130,17 @@
         <p id="rider-status" role="status" aria-live="polite">Loading rider…</p>
         <p class="keys"><kbd>F</kbd> switch board / on foot<br><kbd>W</kbd> walk · <kbd>Shift</kbd> run<br><kbd>A</kbd> / <kbd>D</kbd> turn · <kbd>S</kbd> stop</p>
         <p class="keys touch-keys">On foot / Board switches · push the stick up to walk, all the way out to run</p>
+      </section>
+      <section class="flyout hidden" id="fly-actions" aria-label="Actions">
+        <div class="tab">Actions</div>
+        <div class="action-body">
+          <p class="note">On foot only · actions loop. Press <kbd>X</kbd> or choose the same action again to stop.</p>
+          <div class="choices"><button type="button" id="action-stop">Stop action</button></div>
+          <p class="note">Quick keys</p>
+          <div id="action-shortcuts" class="action-shortcuts"></div>
+          <div id="action-list" class="riders" role="group" aria-label="Choose an action"></div>
+          <p class="note" id="action-status" role="status" aria-live="polite"></p>
+        </div>
       </section>
       <section class="flyout hidden" id="fly-outfit" aria-label="Outfit &amp; gear">
         <div class="tab">Outfit &amp; gear</div>

@@ -1,5 +1,8 @@
 import { setLoadingProgress, setLoadingArrival, finishLoading } from './loading.js';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { retarget } from './player/rider-model.js';
+import { makeActionLoop } from './player/action-loop.js';
 import { SERVICE_CENTRES, PISTE_HALF_WIDTH, ONSEN } from './world/data.js';
 import { loadResort, createResort, along, MAIN_RUN, TREELINE } from './world/resort.js';
 import { createBackdrop } from './world/terrain.js';
@@ -173,7 +176,59 @@ sound.listen();
 // that needs a gesture, the next tap or key does it (see Sound.listen).
 document.addEventListener('visibilitychange', () => { if (!document.hidden) sound.resume(); });
 window.addEventListener('pageshow', () => sound.resume());
-const menu = createMenu(sound);
+const ACTIONS = [
+  ['booty-hip-hop-dance', 'Booty Hip Hop Dance'], ['macarena-dance', 'Macarena Dance'],
+  ['breakdance-freezes', 'Breakdance Freezes'], ['moonwalk', 'Moonwalk'],
+  ['golf-drive', 'Golf Drive'], ['gunplay', 'Gunplay'], ['fireball', 'Fireball'],
+  ['roundhouse-kick', 'Roundhouse Kick'], ['guitar-playing', 'Guitar Playing'],
+  ['kneeling-down', 'Kneeling Down'],
+].map(([id, label]) => ({ id, label }));
+const actionFiles = new Map();
+let specialAction = null, pendingAction = null, actionRequest = 0;
+const actionStatus = document.getElementById('action-status');
+const menu = createMenu(sound, { actions: ACTIONS, playAction: playSpecialAction });
+document.getElementById('action-stop').addEventListener('click', stopSpecialAction);
+async function playSpecialAction(id) {
+  const item = ACTIONS.find((entry) => entry.id === id);
+  if (!item) return;
+  if (specialAction?.id === id || pendingAction === id) { stopSpecialAction(); return; }
+  if (state !== 'ride' || (rider.locomotion !== 'walk' && !(specialAction && rider.locomotion === 'act')) || !rider.model || !phys.grounded || phys.crashed > 0 || rider.throwT !== null) {
+    actionStatus.textContent = 'Switch to on foot and stop before playing an action.';
+    hud.toast('Actions are available on foot');
+    return;
+  }
+  const request = ++actionRequest, model = rider.model;
+  pendingAction = id;
+  actionStatus.textContent = `Loading ${item.label}…`;
+  try {
+    if (!actionFiles.has(id)) actionFiles.set(id, new GLTFLoader().loadAsync(import.meta.env.BASE_URL + `models/motions/special-actions-v01/${id}.glb`).catch((err) => { actionFiles.delete(id); throw err; }));
+    const source = await actionFiles.get(id);
+    if (request !== actionRequest) return;
+    pendingAction = null;
+    if (state !== 'ride' || rider.model !== model || !phys.grounded || phys.crashed > 0 || rider.throwT !== null || (rider.locomotion !== 'walk' && !(specialAction && rider.locomotion === 'act'))) {
+      actionStatus.textContent = specialAction ? `Playing ${ACTIONS.find((entry) => entry.id === specialAction.id).label}` : 'Action stopped.';
+      return;
+    }
+    const clip = makeActionLoop(retarget(source.animations[0], source.scene, model.bindScene));
+    if (!clip.tracks.length || !clip.duration) throw new Error('No usable animation tracks');
+    phys.vel.set(0, 0, 0); phys.yawRate = 0;
+    specialAction = { id, clip, time: 0, model };
+    rider.play(clip, 0);
+    actionStatus.textContent = `Playing ${item.label}`;
+  } catch (error) {
+    console.warn('Action unavailable:', id, error);
+    if (request === actionRequest) { pendingAction = null; actionStatus.textContent = `${item.label} could not be loaded.`; }
+  }
+}
+function stopSpecialAction() {
+  ++actionRequest;
+  if (!specialAction && !pendingAction) return;
+  pendingAction = null;
+  specialAction = null;
+  actionStatus.textContent = 'Action stopped.';
+  if (rider.locomotion === 'act') rider.setLocomotion('walk');
+}
+
 // The GPS: pick a destination on the big map and it routes you there.
 const gps = new Navigator({ hf: detail, runs: meta.runs, rides });
 hud.gps = gps;
@@ -285,6 +340,9 @@ function act(code, repeat = false) {
   if ((code === 'Enter' || code === 'Space') && state === 'title') { begin(); return; }
   if ((code === 'Enter' || code === 'Space' || code === 'Escape') && state === 'swoop') { swoop.t = 1; return; }
   if ((code === 'Enter' || code === 'Space' || code === 'Escape') && state === 'arrive') { arrival.t = 1; return; }
+  if (!repeat && /^Digit[123]$/.test(code)) { const id = menu.actionForKey(Number(code.slice(-1)) - 1); if (id) playSpecialAction(id); return; }
+  if ((specialAction || pendingAction) && code === 'KeyX' && !repeat) { stopSpecialAction(); return; }
+  if (specialAction) { if (code === 'KeyF' && !repeat) { stopSpecialAction(); toggleLocomotion(); } return; }
   if (code === 'KeyR' && !repeat && state === 'ride') startRun();
   if (code === 'KeyR' && !repeat && state === 'drive') carHome();
   if (code === 'KeyF' && !repeat && state === 'ride') toggleLocomotion();
@@ -354,7 +412,7 @@ function readInput() {
   input.walk = input.tuck;
   input.run = shift || t.full; // on foot, the stick pushed all the way out runs
   // Throwing on foot, the feet are busy with the throw.
-  if (rider.throwT !== null && rider.locomotion === 'walk') { input.walk = input.run = false; input.steer = 0; }
+  if (specialAction || (rider.throwT !== null && rider.locomotion === 'walk')) { input.walk = input.run = false; input.steer = 0; input.jump = false; }
   pedals.throttle = input.tuck;
   pedals.reverse = input.brake;
   pedals.steer = input.steer;
@@ -377,6 +435,7 @@ function restoreRide() {
   }
 }
 function toggleLocomotion() {
+  stopSpecialAction();
   if (!phys.grounded || phys.crashed > 0 || (rider.throwT !== null && rider.locomotion === 'walk' && rider.throwUsesPitch)) return;
   if (rider.locomotion === 'walk') {
     restoreRide();
@@ -855,7 +914,7 @@ function updateRideCamera(dt) {
 const _q = new THREE.Quaternion(), _m = new THREE.Matrix4();
 const _f = new THREE.Vector3(), _x = new THREE.Vector3(), _up = new THREE.Vector3();
 function poseRider(dt, snap = false) {
-  const walking = rider.locomotion === 'walk';
+  const walking = rider.locomotion === 'walk' || !!specialAction;
   if (walking || !phys.grounded) _up.set(0, 1, 0);
   else _up.copy(phys.normal);
   phys.forward(_f);
@@ -930,6 +989,13 @@ function frame() {
   // long tab stalls without changing the game's existing physics time step.
   const chairDt = Math.min(elapsedFrame, 0.25);
   time += dt;
+  if (specialAction) {
+    if (state !== 'ride' || rider.model !== specialAction.model || rider.locomotion !== 'act') stopSpecialAction();
+    else {
+      specialAction.time = (specialAction.time + dt) % specialAction.clip.duration;
+      rider.play(specialAction.clip, specialAction.time);
+    }
+  }
   readInput();
   lifts.update(dt, chairDt);
 
@@ -938,7 +1004,7 @@ function frame() {
   } else if (state === 'ride') {
     acc += dt;
     while (acc >= STEP) {
-      if (rider.locomotion === 'walk') phys.stepWalk(STEP, input);
+      if (rider.locomotion === 'walk' || specialAction) phys.stepWalk(STEP, input);
       else phys.step(STEP, input);
       acc -= STEP;
     }
@@ -969,7 +1035,7 @@ function frame() {
     // throws up a plume as it goes, more when it turns or skids.
     phys.forward(_f);
     _side.set(-_f.z, 0, _f.x);
-    const onBoard = rider.locomotion !== 'walk' && phys.grounded && phys.crashed <= 0;
+    const onBoard = rider.locomotion !== 'walk' && !specialAction && phys.grounded && phys.crashed <= 0;
     updateSink(dt, onBoard);
     if (onBoard) {
       if (rider.gear === 'ski') trail.add(phys.pos, _side, 0.09, phys.powder > 0.5 ? 0.42 + sink : 0, 0.25);
@@ -994,7 +1060,7 @@ function frame() {
     placeCollar();
     updateRideCamera(dt);
     hud.update(phys, elapsed);
-    sound.update(phys.speed, phys.slip + (input.brake ? 4 : 0), phys.grounded && rider.locomotion !== 'walk');
+    sound.update(phys.speed, phys.slip + (input.brake ? 4 : 0), phys.grounded && rider.locomotion !== 'walk' && !specialAction);
   } else if (state === 'drive') {
     const drive = car.phys;
     acc += dt;
