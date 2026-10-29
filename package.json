@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "fetch-data": "node tools/terrain/fetch-data.mjs",
+    "fetch-koktokay": "node tools/terrain/fetch-data.mjs --koktokay",
     "test": "node tests/rider-animation.mjs && node tests/landing-recovery.mjs"
   },
   "dependencies": {

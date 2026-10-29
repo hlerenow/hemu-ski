@@ -33,12 +33,13 @@ async function loadEdits(base) {
 // The bake in public/data, which the game, the diorama and the tools all read.
 // With `edits`, the map editor's saved heights, holes, runs and lifts replace the
 // bake's, and the places it moved (see Places, below) go where it put them.
-export async function loadWorld({ edits: useEdits = false } = {}) {
-  const meta = await (await fetch(BASE + 'world.json')).json();
-  const edits = useEdits ? await loadEdits(BASE) : null;
+export async function loadWorld({ edits: useEdits = false, dataset = 'hemu' } = {}) {
+  const base = dataset === 'koktokay' ? BASE + 'koktokay/' : BASE;
+  const meta = await (await fetch(base + 'world.json')).json();
+  const edits = useEdits ? await loadEdits(base) : null;
   const detailMeta = edits ? { ...meta.detail, ...edits.detail, file: EDITS_DIR + edits.detail.file } : meta.detail;
   const [d, b] = await Promise.all(
-    [detailMeta, meta.backdrop].map((f) => f && fetch(BASE + f.file, { cache: edits ? 'no-store' : 'default' }).then((r) => r.arrayBuffer())),
+    [detailMeta, meta.backdrop].map((f) => f && fetch(base + f.file, { cache: edits ? 'no-store' : 'default' }).then((r) => r.arrayBuffer())),
   );
   const detail = new Heightfield(detailMeta.size, detailMeta.cells, decode(d, detailMeta), detailMeta.center);
   // The bake's runs and lifts, before the edits replace them (the editor puts things back from these).
@@ -49,7 +50,7 @@ export async function loadWorld({ edits: useEdits = false } = {}) {
     detail.setHoles(edits.tileCells, edits.holes);
     applyPlaces(edits.places);
   }
-  setSummitFrame(meta.lifts);
+  if (dataset === 'hemu') setSummitFrame(meta.lifts);
   return {
     meta,
     edits,

@@ -3,6 +3,14 @@
 `npm run dev`, then open `/tools/map-editor/`: a working view of the game's map for
 reshaping it. The map is cut into 80 m tiles (10 × 10 heightfield cells).
 
+Use the **Map** menu to load **Koktokay / 可可托海**, or open
+`/tools/map-editor/?map=koktokay`. Its terrain and OpenStreetMap runs/lifts are
+stored separately in `public/data/koktokay/`. The Koktokay editor saves to
+`public/data/koktokay/edits/`; it does not change Hemu's map or the shipped game.
+The tree tool and Ride button are unavailable there because Hemu's forest and
+game are specific to Jikepulin. Use `?map=koktokay&original` to inspect the
+unmodified bake. Regenerate the Koktokay dataset with `npm run fetch-koktokay`.
+
 Or double-click `scripts/Hemu Map Editor.command` (a symlink to it on the
 Desktop works too). It opens the editor on port 5190, starting the dev server
 there first if it isn't running; `scripts/Hemu Ski.command` uses the same server,

@@ -9,18 +9,22 @@ import { PNG } from 'pngjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
 const CACHE = path.join(ROOT, '.cache');
-const OUT = path.join(ROOT, 'public/data');
+const RESORT = process.argv.includes('--koktokay') ? 'koktokay' : 'hemu';
+const OUT = path.join(ROOT, 'public/data', RESORT === 'koktokay' ? 'koktokay' : '');
 const UA = 'hemu-ski-experiment/0.1 (personal game prototype)';
 
 // Gondola #6 (6号索道) — the OpenSkiMap object the user linked.
 const LIFT_BOTTOM = [87.5451301, 48.6223632];
 const LIFT_TOP = [87.5540669, 48.6295045];
-const ORIGIN = [(LIFT_BOTTOM[0] + LIFT_TOP[0]) / 2, (LIFT_BOTTOM[1] + LIFT_TOP[1]) / 2];
+// OSM node 9406749601, 可可托海国际滑雪场 (WGS84).
+const ORIGIN = RESORT === 'koktokay' ? [90.05679, 47.18862] :
+  [(LIFT_BOTTOM[0] + LIFT_TOP[0]) / 2, (LIFT_BOTTOM[1] + LIFT_TOP[1]) / 2];
 
-// 8 m grid, playable area: the whole upper mountain plus the valley floor down to
-// the East and West service centres. Off-centre, but coordinates stay relative to
-// Gondola No. 6 (the block's centre is written to world.json).
-const DETAIL = { size: 7200, cells: 900, zoom: 14, center: [300, 1500] };
+// 8 m grid. Hemu's block reaches down to both service centres; Koktokay's
+// larger block covers the OSM ski runs west and south of the resort point.
+const DETAIL = RESORT === 'koktokay'
+  ? { size: 9600, cells: 1200, zoom: 14, center: [-700, 700] }
+  : { size: 7200, cells: 900, zoom: 14, center: [300, 1500] };
 const BACKDROP = { size: 40000, cells: 320, zoom: 11 }; // 125 m grid, horizon mountains
 
 // Names OpenStreetMap doesn't have, by way id. The lake in the hollow north of
@@ -212,15 +216,16 @@ async function main() {
   await fs.writeFile(path.join(OUT, 'backdrop.u16'), Buffer.from(b.q.buffer));
 
   console.log('Pistes, lifts + lakes…');
-  const { runs, lifts, lakes } = parseWays(await overpass(DETAIL, 'osm-game.json'));
+  const { runs, lifts, lakes } = parseWays(await overpass(DETAIL, RESORT === 'koktokay' ? 'osm-koktokay-v3.json' : 'osm-game.json'));
 
   const meta = {
     source: {
       elevation: 'AWS Terrain Tiles (Terrarium), Mapzen/SRTM et al.',
       pistes: '© OpenStreetMap contributors (ODbL), via Overpass; see openskimap.org',
     },
+    ...(RESORT === 'koktokay' ? { dataset: 'koktokay', originSource: 'OpenStreetMap node 9406749601 (可可托海国际滑雪场)' } : {}),
     origin: { lon: ORIGIN[0], lat: ORIGIN[1] },
-    liftLink: { name: '6号索道', osmWay: 1127891899 },
+    ...(RESORT === 'hemu' ? { liftLink: { name: '6号索道', osmWay: 1127891899 } } : {}),
     detail: { file: 'detail.u16', size: DETAIL.size, cells: DETAIL.cells, center: DETAIL.center, min: d.min, max: d.max },
     backdrop: { file: 'backdrop.u16', size: BACKDROP.size, cells: BACKDROP.cells, min: b.min, max: b.max },
     runs,

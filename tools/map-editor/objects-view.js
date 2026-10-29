@@ -34,9 +34,10 @@ const LIFT = 1.5; // m above the ground
 const STEP = 6; // drape sample spacing (m)
 
 export class ObjectsView {
-  constructor(hf, map) {
+  constructor(hf, map, { includePlaces = true } = {}) {
     this.hf = hf;
     this.map = map;
+    this.includePlaces = includePlaces;
     this.group = new THREE.Group();
     this.mats = [2, 3.5].map((linewidth) => new LineMaterial({ linewidth, vertexColors: true, worldUnits: false }));
     // Everything, then the hovered and selected ones again, drawn heavier.
@@ -74,7 +75,7 @@ export class ObjectsView {
   rebuild() {
     const items = [];
     setSummitFrame(this.map.lifts); // the summit's landmarks follow its stations
-    for (const id of PLACE_IDS) {
+    for (const id of this.includePlaces ? PLACE_IDS : []) {
       const info = PLACES[id], { x, z, yaw } = placeOf(id);
       items.push({ id, kind: 'place', x, z, yaw, hw: info.size[0], hd: info.size[1], round: info.round, color: info.color, clearing: info.clearing });
     }

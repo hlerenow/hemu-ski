@@ -31,17 +31,31 @@ sun.position.set(0.62, 0.55, 0.56);
 scene.add(sun);
 
 // ---------- Map ----------
-const world = await loadWorld({ edits: !new URLSearchParams(location.search).has('original') });
+const urlParams = new URLSearchParams(location.search);
+const dataset = urlParams.get('map') === 'koktokay' ? 'koktokay' : 'hemu';
+const koktokay = dataset === 'koktokay';
+$('dataset').value = dataset;
+$('dataset').addEventListener('change', (e) => {
+  const next = new URL(location.href);
+  if (e.target.value === 'hemu') next.searchParams.delete('map');
+  else next.searchParams.set('map', e.target.value);
+  location.href = next.href;
+});
+if (koktokay) {
+  document.querySelector('[data-tool="trees"]').hidden = true;
+  $('play').hidden = true;
+}
+const world = await loadWorld({ edits: !urlParams.has('original'), dataset });
 const hf = world.detail;
-const map = new EditMap(world);
+const map = new EditMap(world, dataset);
 const terrain = new TerrainView(hf);
 scene.add(terrain.group);
-scene.add(createBackdrop(world.backdrop, hf, TREELINE));
+if (!koktokay) scene.add(createBackdrop(world.backdrop, hf, TREELINE));
 const runsView = new RunsView(hf, map.runs, world.meta.lifts);
 scene.add(runsView.group);
 const treesView = new TreesView(hf, map, world.meta.lifts);
-scene.add(treesView.group);
-const objectsView = new ObjectsView(hf, map);
+if (!koktokay) scene.add(treesView.group);
+const objectsView = new ObjectsView(hf, map, { includePlaces: !koktokay });
 scene.add(objectsView.group);
 
 // ---------- Camera ----------
@@ -104,6 +118,7 @@ const selection = new Set();
 const params = { step: () => +$('p-step').value || 5, blend: () => Math.max(0, +$('p-blend').value || 0), halfWidth: () => (+$('p-width').value || PISTE_HALF_WIDTH * 2) / 2 };
 
 function setTool(t) {
+  if (koktokay && t === 'trees') return;
   tool = t;
   document.querySelectorAll('[data-tool]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tool === t)));
   document.querySelectorAll('[data-panel]').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== t));
@@ -368,7 +383,7 @@ $('play').addEventListener('click', async () => {
 $('reset').addEventListener('click', async () => {
   if (!confirm('Throw away the saved edits (and any unsaved ones) and go back to the baked map?')) return;
   try {
-    await EditMap.discardSaved();
+    await EditMap.discardSaved(dataset);
     map.dirty = false;
     location.reload();
   } catch (err) { say(err.message); }

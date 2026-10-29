@@ -25,6 +25,8 @@
 .ed-card .hint { margin: 8px 0 0; font-size: 14px; line-height: 1.3; opacity: 0.65; }
 
 .ed-tools { left: 18px; top: 34px; width: 330px; padding: 20px 14px 14px; }
+.ed-map-choice { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ed-map-choice select { flex: 1; min-width: 0; font: inherit; color: var(--ink); background: #fff; border: 2px solid var(--ink); border-radius: 4px; }
 .ed-toolrow { display: flex; gap: 6px; margin-bottom: 10px; }
 .ed-toolrow button { flex: 1; padding: 3px 4px; font-size: 15px; white-space: nowrap; }
 .ed-sel { margin: 0 0 8px; min-height: 22px; line-height: 1.25; }

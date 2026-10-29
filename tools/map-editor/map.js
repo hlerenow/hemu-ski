@@ -8,7 +8,8 @@ import { GAME_FOREST } from '../../src/world/trees.js';
 const smoothstep = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
 export class EditMap {
-  constructor(world) {
+  constructor(world, dataset = 'hemu') {
+    this.dataset = dataset;
     this.hf = world.detail;
     this.meta = world.meta;
     this.runs = world.meta.runs;
@@ -329,19 +330,21 @@ export class EditMap {
       places: Object.fromEntries(Object.entries(this.places).map(([id, { x, z, yaw }]) => [id, { x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10, yaw: Math.round(yaw * 1000) / 1000 }])),
     };
     // Heights first: edits.json is what tells the game to use them.
-    await put('detail.u16', data.buffer);
-    await put('edits.json', JSON.stringify(edits));
+    await put('detail.u16', data.buffer, this.dataset);
+    await put('edits.json', JSON.stringify(edits), this.dataset);
     this.dirty = false;
     return edits;
   }
 
-  static async discardSaved() {
-    const r = await fetch('/__editor/' + EDITS_DIR.slice(0, -1), { method: 'DELETE' });
+  static async discardSaved(dataset = 'hemu') {
+    const prefix = dataset === 'koktokay' ? 'koktokay/' : '';
+    const r = await fetch('/__editor/' + prefix + EDITS_DIR.slice(0, -1), { method: 'DELETE' });
     if (!r.ok) throw new Error(`Couldn't remove the saved edits (${r.status})`);
   }
 }
 
-async function put(name, body) {
-  const r = await fetch('/__editor/' + EDITS_DIR + name, { method: 'PUT', body });
+async function put(name, body, dataset = 'hemu') {
+  const prefix = dataset === 'koktokay' ? 'koktokay/' : '';
+  const r = await fetch('/__editor/' + prefix + EDITS_DIR + name, { method: 'PUT', body });
   if (!r.ok) throw new Error(`Saving ${name} failed (${r.status}). Is this the Vite dev server?`);
 }
