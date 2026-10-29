@@ -1342,7 +1342,7 @@ const chairSeat = {
   hips: new THREE.Vector3(0, 0, 0),
   feet: [new THREE.Vector3(0.18, -0.48, 0.48), new THREE.Vector3(-0.18, -0.48, 0.48)],
   grips: [new THREE.Vector3(0.35, 0.18, 0.22), new THREE.Vector3(-0.35, 0.18, 0.22)],
-  kneeOut: 0.12, fold: 0.05, lift: true,
+  kneeOut: 0.12, fold: 0.05, lift: true, chairAnimation: true,
 };
 function boardChair(ride, system) {
   lifts.update(0); // Populate grip positions even if boarding before the first frame.

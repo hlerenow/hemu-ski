@@ -43,7 +43,12 @@ const BOARD_TOP = 0.025;
 const FADE = 0.25;
 const _fade = new THREE.Quaternion();
 const loading = new Map();
-let pitchingPromise, idlePromise;
+let pitchingPromise, idlePromise, chairPromise;
+export function loadChairSitting() {
+  chairPromise ||= new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'models/motions/chairlift-sitting-v01/chairlift-sitting-v01.glb')
+    .catch((err) => { chairPromise = null; throw err; });
+  return chairPromise;
+}
 export function loadIdle() {
   idlePromise ||= new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'models/motions/weight-shift-idle-v01/weight-shift-idle-v01.glb')
     .catch((err) => { idlePromise = null; throw err; });
@@ -86,7 +91,7 @@ export class RiderModel {
   // `outfit` names one of RIDER_MODELS[id].outfits, sized to `fit`: the
   // RiderModel of the rider's own clothes. `borrow`: the loaded model of the
   // rider's `walkFrom`, if it has one.
-  constructor(gltf, id = 'male', { outfit = null, fit = null, borrow = null, pitching = null, idle = null } = {}) {
+  constructor(gltf, id = 'male', { outfit = null, fit = null, borrow = null, pitching = null, idle = null, chair = null } = {}) {
     const spec = RIDER_MODELS[id], wearing = outfit ? spec.outfits[outfit] : spec;
     const scene = clone(gltf.scene);
     scene.traverse((o) => {
@@ -130,6 +135,15 @@ export class RiderModel {
     this.animationScene = clone(gltf.scene);
     for (const entry of this.rest) entry.animated = this.animationScene.getObjectByName(entry.bone.name);
     this.mixer = new THREE.AnimationMixer(this.animationScene);
+    this.chair = null;
+    if (chair?.animations[0]) {
+      const scene = clone(gltf.scene);
+      const mixer = new THREE.AnimationMixer(scene);
+      const clip = retarget(chair.animations[0], chair.scene, this.bindScene);
+      const action = mixer.clipAction(clip).setLoop(THREE.LoopPingPong, Infinity).play();
+      const targets = this.rest.map(({ bone }) => scene.getObjectByName(bone.name));
+      this.chair = { scene, mixer, action, targets };
+    }
     // A separate target and mixer let the throw blend over the walk without
     // disrupting the walk mixer's cached property values.
     this.pitching = null;
@@ -252,13 +266,40 @@ export class RiderModel {
   // model it came with. Changing clips fades as changing modes does.
   update(dt, rider, mode, speed) {
     const clip = mode === 'act' ? rider.act.clip : null;
-    if (mode !== this.mode || clip !== this.clip) {
+    const chairActive = mode === 'sit' && rider.seat?.chairAnimation && rider.modelId === 'female' && rider.gear === 'ski' && !!this.chair;
+    if (mode !== this.mode || clip !== this.clip || chairActive !== !!this.chairActive) {
       this.transition = this.rest.map(({ bone }) => ({ p: bone.position.clone(), q: bone.quaternion.clone(), s: bone.scale.clone() }));
       this.fade = 0;
       this.mode = mode;
       this.clip = clip;
+      this.chairActive = chairActive;
+      if (chairActive) this.chair.action.reset().play();
     }
-    if (mode === 'act') {
+    if (chairActive) {
+      // Establish the cushion anchor using the existing seated pose, then
+      // apply the authored rotations without its free-floating hip translation.
+      this.apply(rider, mode);
+      const hips = this.bones.Hips.bone;
+      this.#fromBody(rider.hips.position, _v);
+      const hipPosition = hips.parent.worldToLocal(this.root.localToWorld(_v)).clone();
+      this.chair.mixer.update(dt);
+      for (const [i, { bone }] of this.rest.entries()) {
+        const animated = this.chair.targets[i];
+        if (animated) { bone.position.copy(animated.position); bone.quaternion.copy(animated.quaternion); bone.scale.copy(animated.scale); }
+      }
+      this.bones.Hips.bone.position.copy(hipPosition);
+      // The source was made for legs without long skis. Open the thighs a
+      // little at the hip so the two skis have room while retaining the kick.
+      this.root.updateWorldMatrix(true, true);
+      const axis = new THREE.Vector3(0, 0, 1).applyQuaternion(this.root.getWorldQuaternion(new THREE.Quaternion()));
+      for (const [side, sign] of [['Left', 1], ['Right', -1]]) {
+        const bone = this.bones[side + 'UpLeg'].bone;
+        const parent = bone.parent.getWorldQuaternion(new THREE.Quaternion());
+        const spread = new THREE.Quaternion().setFromAxisAngle(axis, -sign * 0.16);
+        bone.quaternion.premultiply(parent.clone().invert().multiply(spread).multiply(parent));
+        bone.updateWorldMatrix(false, true);
+      }
+    } else if (mode === 'act') {
       const action = this.#act(this.mixer, clip, this.acts);
       for (const a of this.acts.values()) if (a !== action) a.stop();
       this.walk?.setEffectiveWeight?.(0);
@@ -305,6 +346,31 @@ export class RiderModel {
         bone.scale.lerpVectors(from.s, bone.scale, t);
       });
       if (this.fade === FADE) this.transition = null;
+    }
+    if (chairActive) this.#followChairFeet(rider);
+  }
+
+  #followChairFeet(rider) {
+    this.root.updateWorldMatrix(true, true);
+    for (const [i, side] of ['Left', 'Right'].entries()) {
+      const foot = this.bones[side + 'Foot'];
+      // Keep the boots and skis facing forward. The source swings bare feet
+      // sideways; that twist makes long skis cross or point across the chair.
+      const rootQ = this.root.getWorldQuaternion(new THREE.Quaternion());
+      const delta = rootQ.clone().invert().multiply(foot.bone.getWorldQuaternion(new THREE.Quaternion())).multiply(foot.modelQ.clone().invert());
+      const sourcePitch = new THREE.Euler().setFromQuaternion(delta, 'YXZ').x;
+      // A slightly raised tip keeps the long tail below the cushion during
+      // the kick, while allowing some ankle motion from the original clip.
+      const pitch = THREE.MathUtils.clamp(sourcePitch * 0.35 - 0.25, -0.55, -0.15);
+      const parentQ = foot.bone.parent.getWorldQuaternion(new THREE.Quaternion());
+      foot.bone.quaternion.copy(parentQ.invert().multiply(rootQ).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch, 0, 0))).multiply(foot.modelQ));
+      foot.bone.updateWorldMatrix(false, true);
+      // Offset from the ankle to the sole, expressed in the bind foot frame.
+      const offset = new THREE.Vector3(0, -this.ankle.y, -this.ankle.z).applyQuaternion(foot.modelQ.clone().invert());
+      const world = foot.bone.localToWorld(offset);
+      rider.feet[i].position.copy(rider.body.worldToLocal(world));
+      const bodyQ = rider.body.getWorldQuaternion(new THREE.Quaternion()).invert();
+      rider.feet[i].quaternion.copy(bodyQ.multiply(foot.bone.getWorldQuaternion(new THREE.Quaternion())).multiply(foot.modelQ.clone().invert()));
     }
   }
 
