@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { makeToon } from '../render/toon.js';
 
-export function mountainMaterial() {
+export function mountainMaterial({ clipBounds = null } = {}) {
   const mat = makeToon({}, { hatch: 0 });
   const toonCompile = mat.onBeforeCompile;
   const snow = new THREE.Color('#fbfaf4'); // the near terrain's snow
@@ -78,7 +78,14 @@ export function mountainMaterial() {
         .replace('fogFar, vFogDepth', 'fogFar * (1.0 + 0.8 * smoothstep(9000.0, 17000.0, fogFar)), vFogDepth')
         .replace('fogColor, fogFactor', `mix(fogColor,
         vec3(dot(fogColor, vec3(0.299, 0.587, 0.114))) * vec3(0.91, 0.97, 1.04), 0.5), fogFactor`));
+    if (clipBounds) {
+      shader.uniforms.uClipBounds = { value: new THREE.Vector4(...clipBounds) };
+      shader.fragmentShader = shader.fragmentShader.replace('void main() {', `uniform vec4 uClipBounds;
+        void main() {
+          if (vTWorld.x >= uClipBounds.x && vTWorld.x <= uClipBounds.z &&
+              vTWorld.z >= uClipBounds.y && vTWorld.z <= uClipBounds.w) discard;`);
+    }
   };
-  mat.customProgramCacheKey = () => 'dem-rock-v7';
+  mat.customProgramCacheKey = () => clipBounds ? 'dem-rock-v7-clip' : 'dem-rock-v7';
   return mat;
 }

@@ -18,10 +18,12 @@ const CELL = 20; // m, picking hash
 export const TREE_HEIGHT = 11.8; // m, top of a size-1 tree in the game
 
 export class TreesView {
-  constructor(hf, map, lifts) {
+  constructor(hf, map, lifts, { forestOptions = GAME_FOREST, pisteCell = 4 } = {}) {
     this.hf = hf;
     this.map = map;
     this.lifts = lifts;
+    this.forestOptions = forestOptions;
+    this.pisteCell = pisteCell;
     this.group = new THREE.Group();
     this.geo = new THREE.ConeGeometry(3, TREE_HEIGHT, 6, 1).translate(0, TREE_HEIGHT / 2, 0);
     this.mat = new THREE.MeshLambertMaterial({ color: '#ffffff' });
@@ -57,12 +59,12 @@ export class TreesView {
     const { hf, map } = this;
     if (map.trees.density !== this.density) this.dirty = 'all';
     if (this.dirty) {
-      const piste = (this.piste ??= new PisteField(map.runs, hf.size, 4, 60, hf.center));
-      const opts = { ...GAME_FOREST, density: map.trees.density };
+      const piste = (this.piste ??= new PisteField(map.runs, hf.size, this.pisteCell, 60, hf.center));
+      const opts = { ...this.forestOptions, density: map.trees.density };
       if (this.dirty === 'all') this.spots = forestSpots(hf, piste, this.lifts, opts);
       else {
         // Swap the spots whose grid corner is in the area (forestSpots' own rule).
-        const [x0, z0, x1, z1] = this.dirty, sp = GAME_FOREST.spacing, cols = Math.ceil(hf.size / sp);
+        const [x0, z0, x1, z1] = this.dirty, sp = this.forestOptions.spacing, cols = Math.ceil(hf.size / sp);
         const inside = (id) => {
           const x = hf.x0 + (id % cols) * sp, z = hf.z0 + Math.floor(id / cols) * sp;
           return x >= x0 && x <= x1 && z >= z0 && z <= z1;

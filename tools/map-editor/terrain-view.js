@@ -9,7 +9,7 @@ const CHUNK = 100; // cells per chunk side
 const WIDTH_RANGE = 40; // m from a centreline the widths layer can tell apart
 
 export class TerrainView {
-  constructor(hf) {
+  constructor(hf, { snowy = false } = {}) {
     this.hf = hf;
     this.group = new THREE.Group();
     const n = hf.tiles;
@@ -23,6 +23,7 @@ export class TerrainView {
       uRect: { value: new THREE.Vector4(-1, -1, -2, -2) }, // tile range being hovered / dragged
       uRectColor: { value: new THREE.Color('#f0c24a') },
       uMinMax: { value: new THREE.Vector2(1200, 3000) },
+      uSnow: { value: snowy ? 1 : 0 },
       // The widths layer (see setPiste): on, the game's piste half-width, range.
       uPiste: { value: new THREE.DataTexture(new Uint8Array(4).fill(255), 1, 1) },
       uPisteGrid: { value: new THREE.Vector4(0, 0, 1, 1) },
@@ -204,6 +205,7 @@ function makeMaterial(uniforms) {
         uniform vec4 uRect;
         uniform vec3 uRectColor;
         uniform vec2 uMinMax;
+        uniform float uSnow;
         uniform sampler2D uPiste;
         uniform vec4 uPisteGrid; // x0, z0, cell, cells per side
         uniform vec4 uWidths; // on, piste half-width, range
@@ -224,6 +226,7 @@ function makeMaterial(uniforms) {
         float e = clamp((vEdWorld.y - uMinMax.x) / max(1.0, uMinMax.y - uMinMax.x), 0.0, 1.0);
         vec3 col = mix(vec3(0.70, 0.78, 0.68), vec3(0.97, 0.96, 0.92), smoothstep(0.0, 0.45, e));
         col = mix(col, vec3(0.86, 0.92, 0.98), smoothstep(0.6, 1.0, e));
+        if (uSnow > 0.5) col = mix(vec3(0.96, 0.96, 0.93), vec3(0.88, 0.93, 0.97), smoothstep(0.35, 1.0, e));
         // Steep ground goes rocky grey.
         float slope = 1.0 - normalize(vEdNormal).y;
         col = mix(col, vec3(0.62, 0.60, 0.57), smoothstep(0.22, 0.4, slope) * 0.7);

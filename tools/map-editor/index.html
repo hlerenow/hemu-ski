@@ -13,10 +13,12 @@
   <body>
     <canvas id="game"></canvas>
     <div class="ed-label hidden" id="obj-label"></div>
+    <div id="map-labels" aria-hidden="true"></div>
 
     <aside class="ed-card ed-tools">
       <div class="tab">Map editor</div>
       <label class="ed-map-choice">Map <select id="dataset"><option value="hemu">Hemu / 吉克普林</option><option value="koktokay">Koktokay / 可可托海</option></select></label>
+      <div class="ed-map-scope hidden" id="map-scope"></div>
       <div class="ed-toolrow" role="toolbar" aria-label="Tools">
         <button data-tool="tiles" title="Tiles (T)">▦ Tiles <kbd>T</kbd></button>
         <button data-tool="runs" title="Runs (R)">〰 Runs <kbd>R</kbd></button>
@@ -47,6 +49,7 @@
           <button data-act="run-lower" title="Lower the run ([)">▼ Lower</button>
         </div>
         <p class="hint">Drag a point to move it. Double-click the line to add one, Alt-click a point (or hover it and press Del) to remove it.</p>
+        <div class="ed-feature-list hidden" id="run-list"></div>
       </section>
 
       <section data-panel="trees" class="hidden">
@@ -70,6 +73,8 @@
           <button data-act="obj-reset" title="Put it back where the game first had it">↺ Put back</button>
         </div>
         <p class="hint">Drag a hall, the hot spring, a vehicle or a lift station to move it; drag the round handle off its corner to turn it (Shift snaps to 15°). Joined stations move together: Alt-drag pulls one away.</p>
+        <div class="ed-feature-list hidden" id="lift-list"></div>
+        <div class="ed-feature-list hidden" id="poi-list"></div>
       </section>
 
       <section data-panel="hand" class="hidden">

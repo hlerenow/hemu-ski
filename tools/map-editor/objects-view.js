@@ -34,10 +34,11 @@ const LIFT = 1.5; // m above the ground
 const STEP = 6; // drape sample spacing (m)
 
 export class ObjectsView {
-  constructor(hf, map, { includePlaces = true } = {}) {
+  constructor(hf, map, { includePlaces = true, pois = [] } = {}) {
     this.hf = hf;
     this.map = map;
     this.includePlaces = includePlaces;
+    this.pois = pois;
     this.group = new THREE.Group();
     this.mats = [2, 3.5].map((linewidth) => new LineMaterial({ linewidth, vertexColors: true, worldUnits: false }));
     // Everything, then the hovered and selected ones again, drawn heavier.
@@ -79,6 +80,8 @@ export class ObjectsView {
       const info = PLACES[id], { x, z, yaw } = placeOf(id);
       items.push({ id, kind: 'place', x, z, yaw, hw: info.size[0], hd: info.size[1], round: info.round, color: info.color, clearing: info.clearing });
     }
+    for (const poi of this.pois) items.push({ id: `osm:${poi.id}`, kind: 'poi', name: poi.name || '未命名索道站', poiType: poi.type,
+      x: poi.x, z: poi.z, yaw: 0, hw: 3, hd: 3, round: true, color: '#bd7b2d' });
     const at = liftStations(this.map.lifts);
     this.map.lifts.forEach((lift, li) => {
       const p = lift.points, ends = at[li] ?? [p[0], p[p.length - 1]];
@@ -233,6 +236,7 @@ export class ObjectsView {
     const it = this.byId.get(id);
     if (!it) return '';
     if (it.kind === 'place') return PLACES[id].name;
+    if (it.kind === 'poi') return it.name;
     const lift = this.map.lifts[it.li];
     return `${lift.name || (lift.type === 'magic_carpet' ? 'Magic carpet' : 'Lift')} · ${this.#isTop(it) ? 'top' : 'bottom'} ${it.hw ? 'station' : 'end'}`;
   }

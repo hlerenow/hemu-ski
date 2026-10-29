@@ -7,9 +7,15 @@ Use the **Map** menu to load **Koktokay / 可可托海**, or open
 `/tools/map-editor/?map=koktokay`. Its terrain and OpenStreetMap runs/lifts are
 stored separately in `public/data/koktokay/`. The Koktokay editor saves to
 `public/data/koktokay/edits/`; it does not change Hemu's map or the shipped game.
-The tree tool and Ride button are unavailable there because Hemu's forest and
-game are specific to Jikepulin. Use `?map=koktokay&original` to inspect the
-unmodified bake. Regenerate the Koktokay dataset with `npm run fetch-koktokay`.
+It uses a 9.6 km editable area at 8 m resolution and a 30 km snow-covered
+backdrop at 125 m resolution. The Runs and Objects panels list all mapped runs
+and lifts; click a row to frame it. Large and Small Wolf King routes retain
+their OpenStreetMap names and any "estimated" qualifier. The Koktokay Trees
+tool uses estimated forest placement from the terrain, not mapped tree
+locations; OpenStreetMap has no forest polygons in this area. Ride is
+unavailable because the game is specific to Jikepulin. Use
+`?map=koktokay&original` to inspect the unmodified bake. Regenerate the data
+with `npm run fetch-koktokay`.
 
 Or double-click `scripts/Hemu Map Editor.command` (a symlink to it on the
 Desktop works too). It opens the editor on port 5190, starting the dev server

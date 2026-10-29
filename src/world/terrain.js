@@ -303,10 +303,11 @@ function flowMap(h, n) {
   return blurGrid(acc, n, 1);
 }
 
-export function createBackdrop(hf, detail) {
+export function createBackdrop(hf, detail, options = {}) {
   // Use DEM heights unchanged. Only the hidden overlap is sunk, as before.
   // No synthetic peaks, vertical exaggeration, noise displacement or smoothing.
-  const g = gridGeometry(hf, (x, z) => (detail.inside(x, z, 20) ? -80 : 0));
+  const clipDetail = typeof options === 'object' && options.clipDetail;
+  const g = gridGeometry(hf, clipDetail ? null : (x, z) => (detail.inside(x, z, 20) ? -80 : 0));
   // Where rock shows through the snow is read off the DEM's own shape: how
   // high each point stands within its own mountain (against the ground
   // about 1.5 km round it, and 500 m round, for the lesser tops and crests),
@@ -328,7 +329,9 @@ export function createBackdrop(hf, detail) {
   }
   g.setAttribute('aRelief', new THREE.BufferAttribute(relief, 4));
   g.setAttribute('aFlow', new THREE.BufferAttribute(flowMap(soft, n), 1));
-  const mesh = new THREE.Mesh(g, mountainMaterial());
+  const mesh = new THREE.Mesh(g, mountainMaterial(clipDetail ? {
+    clipBounds: [detail.x0, detail.z0, detail.x0 + detail.size, detail.z0 + detail.size],
+  } : {}));
   mesh.name = 'dem-backdrop';
   return mesh;
 }

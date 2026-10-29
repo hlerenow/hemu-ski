@@ -25,7 +25,9 @@ const ORIGIN = RESORT === 'koktokay' ? [90.05679, 47.18862] :
 const DETAIL = RESORT === 'koktokay'
   ? { size: 9600, cells: 1200, zoom: 14, center: [-700, 700] }
   : { size: 7200, cells: 900, zoom: 14, center: [300, 1500] };
-const BACKDROP = { size: 40000, cells: 320, zoom: 11 }; // 125 m grid, horizon mountains
+const BACKDROP = RESORT === 'koktokay'
+  ? { size: 30000, cells: 240, zoom: 11 }
+  : { size: 40000, cells: 320, zoom: 11 }; // both 125 m per cell
 
 // Names OpenStreetMap doesn't have, by way id. The lake in the hollow north of
 // the ridge 可可托海道 follows east from the summit is Cloud Lake.
@@ -158,12 +160,14 @@ function quantize(h) {
   return { q, min, max };
 }
 
-async function overpass({ size, center: [cx, cz] = [0, 0] }, cacheName) {
+async function overpass({ size, center: [cx, cz] = [0, 0] }, cacheName, kind = 'ways') {
   const half = size / 2;
   const [w, n] = localToLonLat(cx - half, cz - half);
   const [e, s] = localToLonLat(cx + half, cz + half);
   const bbox = `${s},${w},${n},${e}`;
-  const query = `[out:json][timeout:90];(way["piste:type"="downhill"](${bbox});way["aerialway"](${bbox});way["natural"="water"](${bbox}););out geom tags;`;
+  const query = kind === 'places'
+    ? `[out:json][timeout:90];(node["aerialway"="station"](${bbox});node["tourism"="attraction"](${bbox}););out body;`
+    : `[out:json][timeout:90];(way["piste:type"="downhill"](${bbox});way["aerialway"](${bbox});way["natural"="water"](${bbox}););out geom tags;`;
   const buf = await cached(cacheName, async () => {
     // The public Overpass instances are often busy; retry a few times.
     for (let attempt = 1; ; attempt++) {
@@ -192,13 +196,23 @@ function parseWays(els, [cx, cz] = [0, 0]) {
     if (t['piste:type'] === 'downhill') {
       runs.push({ id: e.id, name: t.name || null, difficulty: t['piste:difficulty'] || 'intermediate', points: pts });
     } else if (t.aerialway) {
-      lifts.push({ id: e.id, name: t.name || null, type: t.aerialway, points: pts });
+      lifts.push({ id: e.id, name: t.name || null, type: t.aerialway,
+        ...(t['aerialway:occupancy'] ? { occupancy: Number(t['aerialway:occupancy']) } : {}), points: pts });
     } else if (t.natural === 'water' && e.geometry.at(-1).lat === e.geometry[0].lat && e.geometry.at(-1).lon === e.geometry[0].lon) {
       // A closed outline, its last point (the first again) dropped.
       lakes.push({ id: e.id, name: t.name || LAKE_NAMES[e.id] || null, points: pts.slice(0, -1) });
     }
   }
   return { runs, lifts, lakes };
+}
+
+function parsePlaces(els, [cx, cz]) {
+  return els.filter((e) => e.type === 'node' && (e.tags?.aerialway === 'station' || e.tags?.name === '可可托海国际滑雪场'))
+    .map((e) => {
+      const [x, z] = lonLatToLocal(e.lon, e.lat);
+      return { id: e.id, name: e.tags.name || null, type: e.tags.aerialway || e.tags.tourism,
+        x: round1(x - cx), z: round1(z - cz) };
+    });
 }
 
 async function main() {
@@ -217,6 +231,7 @@ async function main() {
 
   console.log('Pistes, lifts + lakes…');
   const { runs, lifts, lakes } = parseWays(await overpass(DETAIL, RESORT === 'koktokay' ? 'osm-koktokay-v3.json' : 'osm-game.json'));
+  const places = RESORT === 'koktokay' ? parsePlaces(await overpass(DETAIL, 'osm-koktokay-places-v2.json', 'places'), DETAIL.center) : [];
 
   const meta = {
     source: {
@@ -231,6 +246,7 @@ async function main() {
     runs,
     lifts,
     lakes,
+    ...(RESORT === 'koktokay' ? { places } : {}),
   };
   await fs.writeFile(path.join(OUT, 'world.json'), JSON.stringify(meta));
   console.log(`Done. detail ${d.min.toFixed(0)}–${d.max.toFixed(0)} m, backdrop ${b.min.toFixed(0)}–${b.max.toFixed(0)} m, ${runs.length} runs, ${lifts.length} lifts, ${lakes.length} lakes`);

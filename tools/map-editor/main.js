@@ -42,20 +42,27 @@ $('dataset').addEventListener('change', (e) => {
   location.href = next.href;
 });
 if (koktokay) {
-  document.querySelector('[data-tool="trees"]').hidden = true;
   $('play').hidden = true;
+  document.title = 'Koktokay Map Editor';
+  document.querySelector('[data-panel="objects"] .hint').textContent = 'Select a lift station to inspect or move it. OpenStreetMap station and resort markers are read-only; the lists below show every mapped lift and marker.';
 }
 const world = await loadWorld({ edits: !urlParams.has('original'), dataset });
+if (koktokay) {
+  $('map-scope').textContent = `${(world.meta.detail.size / 1000).toFixed(1)} km editable · ${Math.round(world.meta.backdrop.size / 1000)} km snow mountain backdrop`;
+  $('map-scope').classList.remove('hidden');
+}
 const hf = world.detail;
 const map = new EditMap(world, dataset);
-const terrain = new TerrainView(hf);
+const terrain = new TerrainView(hf, { snowy: koktokay });
 scene.add(terrain.group);
-if (!koktokay) scene.add(createBackdrop(world.backdrop, hf, TREELINE));
+scene.add(createBackdrop(world.backdrop, hf, koktokay ? { clipDetail: true } : TREELINE));
 const runsView = new RunsView(hf, map.runs, world.meta.lifts);
 scene.add(runsView.group);
-const treesView = new TreesView(hf, map, world.meta.lifts);
-if (!koktokay) scene.add(treesView.group);
-const objectsView = new ObjectsView(hf, map, { includePlaces: !koktokay });
+const treesView = new TreesView(hf, map, world.meta.lifts, koktokay ? {
+  forestOptions: { treeline: 2420, spacing: 18, density: 0.25, clearings: [] }, pisteCell: 8,
+} : {});
+scene.add(treesView.group);
+const objectsView = new ObjectsView(hf, map, { includePlaces: !koktokay, pois: world.meta.places || [] });
 scene.add(objectsView.group);
 
 // ---------- Camera ----------
@@ -65,7 +72,7 @@ controls.dampingFactor = 0.12;
 controls.zoomToCursor = true;
 controls.screenSpacePanning = false; // pan across the ground, like a map
 controls.minDistance = 15;
-controls.maxDistance = 20000;
+controls.maxDistance = koktokay ? 50000 : 20000;
 controls.maxPolarAngle = 1.48;
 const BUTTONS = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
 controls.mouseButtons = { ...BUTTONS };
@@ -73,7 +80,7 @@ controls.mouseButtons = { ...BUTTONS };
 function fitMap() {
   const y = map.tileHeight(Math.floor(hf.tiles / 2) * hf.tiles + Math.floor(hf.tiles / 2));
   controls.target.set(hf.center[0], y, hf.center[1]);
-  camera.position.set(hf.center[0] + 1800, y + 6500, hf.center[1] + 4200);
+  camera.position.set(hf.center[0] + (koktokay ? 6000 : 1800), y + (koktokay ? 16000 : 6500), hf.center[1] + (koktokay ? 12000 : 4200));
   controls.update();
 }
 
@@ -118,7 +125,6 @@ const selection = new Set();
 const params = { step: () => +$('p-step').value || 5, blend: () => Math.max(0, +$('p-blend').value || 0), halfWidth: () => (+$('p-width').value || PISTE_HALF_WIDTH * 2) / 2 };
 
 function setTool(t) {
-  if (koktokay && t === 'trees') return;
   tool = t;
   document.querySelectorAll('[data-tool]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tool === t)));
   document.querySelectorAll('[data-panel]').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== t));
@@ -144,6 +150,7 @@ function setTreeMode(m) {
   $('tree-hint').textContent = m === 'plant'
     ? 'Click to plant a tree; drag to plant a row. Planted trees stand even on a run.'
     : 'Click a tree, or drag a box. Shift adds, Alt takes away. Removed trees show in red; select them to restore.';
+  if (koktokay) $('tree-hint').textContent += ' Forest placement is estimated from terrain; OSM has no forest polygons here.';
   treesView.setHover(null);
   updatePanButton();
 }
@@ -159,6 +166,7 @@ function updatePanButton() {
 }
 
 const tileXY = (t) => [t % hf.tiles, Math.floor(t / hf.tiles)];
+const htmlText = (value) => String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 function tilesInRect(r) {
   const out = [];
   for (let j = r.tj0; j <= r.tj1; j++) for (let i = r.ti0; i <= r.ti1; i++) out.push(j * hf.tiles + i);
@@ -187,7 +195,7 @@ function updatePanels() {
     let len = 0;
     for (let k = 1; k < p.length; k++) len += Math.hypot(p[k][0] - p[k - 1][0], p[k][1] - p[k - 1][1]);
     const drop = hf.heightAt(...p[0]) - hf.heightAt(...p[p.length - 1]);
-    $('run-info').innerHTML = `<span class="badge" style="background:${DIFF_COLORS[r.difficulty] || DIFF_COLORS.intermediate}"></span>${r.name || '<i>unnamed run</i>'}<br><span class="dim">${r.difficulty || '?'} · ${Math.round(len).toLocaleString()} m · ${Math.round(drop)} m drop · ${p.length} points</span>`;
+    $('run-info').innerHTML = `<span class="badge" style="background:${DIFF_COLORS[r.difficulty] || DIFF_COLORS.intermediate}"></span>${r.name ? htmlText(r.name) : '<i>unnamed run</i>'}<br><span class="dim">${htmlText(r.difficulty || '?')} · ${Math.round(len).toLocaleString()} m · ${Math.round(drop)} m drop · ${p.length} points</span>`;
   } else $('run-info').textContent = 'Click a run to edit it.';
   document.querySelectorAll('[data-panel="runs"] [data-act]').forEach((b) => (b.disabled = ri < 0));
 
@@ -211,15 +219,17 @@ function updatePanels() {
   if (it?.kind === 'place') {
     const zh = objectsView.zh(it.id);
     moved = !!map.places[it.id];
-    $('obj-info').innerHTML = `<span class="badge" style="background:${it.color}"></span>${objectsView.label(it.id)}${zh ? ` · ${zh}` : ''}<br><span class="dim">x ${Math.round(it.x)} · z ${Math.round(it.z)} · ${Math.round(hf.heightAt(it.x, it.z)).toLocaleString()} m · faces ${bearingName(it.yaw)}${moved ? ' · <b>moved</b>' : ''}</span>`;
+    $('obj-info').innerHTML = `<span class="badge" style="background:${it.color}"></span>${htmlText(objectsView.label(it.id))}${zh ? ` · ${htmlText(zh)}` : ''}<br><span class="dim">x ${Math.round(it.x)} · z ${Math.round(it.z)} · ${Math.round(hf.heightAt(it.x, it.z)).toLocaleString()} m · faces ${bearingName(it.yaw)}${moved ? ' · <b>moved</b>' : ''}</span>`;
     $('p-facing').value = Math.round(bearingOf(it.yaw)) % 360;
+  } else if (it?.kind === 'poi') {
+    $('obj-info').textContent = `${it.name} · ${it.poiType} · ${Math.round(hf.heightAt(it.x, it.z)).toLocaleString()} m (OpenStreetMap)`;
   } else if (it) {
     const lift = map.lifts[it.li], { length, rise } = objectsView.liftStats(it.li);
     moved = liftMoved(lift);
-    $('obj-info').innerHTML = `<span class="badge" style="background:${it.color}"></span>${objectsView.label(it.id)}<br><span class="dim">${lift.type.replace('_', ' ')} · ${Math.round(length).toLocaleString()} m long · climbs ${Math.round(rise)} m${moved ? ' · <b>moved</b>' : ''}</span>`;
+    $('obj-info').innerHTML = `<span class="badge" style="background:${it.color}"></span>${htmlText(objectsView.label(it.id))}<br><span class="dim">${htmlText(lift.type.replace('_', ' '))} · ${Math.round(length).toLocaleString()} m long · climbs ${Math.round(rise)} m${moved ? ' · <b>moved</b>' : ''}</span>`;
   } else {
     const n = Object.keys(map.places).length + map.lifts.filter(liftMoved).length;
-    $('obj-info').innerHTML = `Click a hall, the hot spring, a vehicle or a lift station.${n ? `<br><span class="dim">${n} moved</span>` : ''}`;
+    $('obj-info').innerHTML = `${koktokay ? 'Select a lift station.' : 'Click a hall, the hot spring, a vehicle or a lift station.'}${n ? `<br><span class="dim">${n} moved</span>` : ''}`;
   }
   const turnable = it?.kind === 'place';
   document.querySelector('[data-act="obj-left"]').disabled = document.querySelector('[data-act="obj-right"]').disabled = $('p-facing').disabled = !turnable;
@@ -265,6 +275,8 @@ map.onChange((c) => {
   if (c.run !== undefined) { widthsStale = true; if (widthsOn) setWidths(true); }
   if (c.label) say(c.label);
   updatePanels();
+  if (koktokay && (c.run !== undefined || c.objects)) renderFeatureLists();
+  if (koktokay) labelsDirty = true;
 });
 
 // The ground each lift and clearing keeps free of trees, [x0, z0, x1, z1].
@@ -274,7 +286,7 @@ function clearedAreas() {
     const a = l.points[0], b = l.points[l.points.length - 1];
     out.set(`lift:${i}`, [Math.min(a[0], b[0]) - pad, Math.min(a[1], b[1]) - pad, Math.max(a[0], b[0]) + pad, Math.max(a[1], b[1]) + pad]);
   });
-  GAME_FOREST.clearings.forEach((c, i) => out.set(`clearing:${i}`, [c.x - c.r - pad, c.z - c.r - pad, c.x + c.r + pad, c.z + c.r + pad]));
+  if (!koktokay) GAME_FOREST.clearings.forEach((c, i) => out.set(`clearing:${i}`, [c.x - c.r - pad, c.z - c.r - pad, c.x + c.r + pad, c.z + c.r + pad]));
   return out;
 }
 let cleared = clearedAreas();
@@ -339,7 +351,7 @@ function turnBy(deg) {
 }
 function putBack() {
   const it = objectsView.selectedItem;
-  if (!it) return;
+  if (!it || it.kind === 'poi') return;
   const label = `Put back ${objectsView.label(it.id)}`;
   if (it.kind === 'place') return map.editObjects(label, (m) => delete m.places[it.id]);
   const lift = map.lifts[it.li], was = map.baked.lifts.find((l) => l.id === lift.id);
@@ -592,6 +604,7 @@ canvas.addEventListener('pointerdown', (e) => {
     updatePanels();
     if (!id || !p) return;
     const it = objectsView.get(id);
+    if (it.kind === 'poi') return;
     drag = { kind: 'object', id, from: { x: p.x, z: p.z }, before };
     if (it.kind === 'station') {
       const lift = map.lifts[it.li], k = it.end ? lift.points.length - 1 : 0;
@@ -727,6 +740,116 @@ function keyPan(dt) {
 }
 
 // ---------- Loop ----------
+const runLabels = [], liftLabels = [];
+const labelPoint = new THREE.Vector3();
+const labelPose = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), tool: '', width: 0, height: 0 };
+let labelsDirty = true;
+function pathLength(points) {
+  let n = 0;
+  for (let i = 1; i < points.length; i++) n += Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]);
+  return n;
+}
+function pathAt(points, fraction) {
+  let left = pathLength(points) * fraction;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1], b = points[i], d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (left <= d) { const t = d ? left / d : 0; return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; }
+    left -= d;
+  }
+  return points.at(-1);
+}
+function makeMapLabel(name, kind) {
+  const el = document.createElement('span');
+  el.className = `ed-map-label ${kind}`;
+  el.textContent = name;
+  $('map-labels').append(el);
+  return el;
+}
+function renderFeatureLists() {
+  if (!koktokay) return;
+  for (const [key, entries] of [['run-list', map.runs], ['lift-list', map.lifts]]) {
+    const root = $(key);
+    root.replaceChildren();
+    entries.forEach((feature, i) => {
+      const button = document.createElement('button');
+      const name = feature.name || (key === 'run-list' ? `未命名雪道 · OSM ${feature.id}` : `未命名索道 · OSM ${feature.id}`);
+      const small = document.createElement('small');
+      small.textContent = key === 'run-list'
+        ? `${feature.difficulty} · ${(pathLength(feature.points) / 1000).toFixed(2)} km`
+        : `${feature.type.replaceAll('_', ' ')} · ${(pathLength(feature.points) / 1000).toFixed(2)} km${feature.occupancy ? ` · ${feature.occupancy} seats` : ''}`;
+      button.textContent = name;
+      button.append(small);
+      button.addEventListener('click', () => {
+        if (key === 'run-list') { setTool('runs'); runsView.setSelected(i); }
+        else { setTool('objects'); objectsView.setSelected(`lift:${i}:0`); }
+        updatePanels();
+        frameSelection();
+      });
+      root.append(button);
+    });
+  }
+  const poiRoot = $('poi-list');
+  poiRoot.replaceChildren();
+  (world.meta.places || []).forEach((poi) => {
+    const button = document.createElement('button');
+    const small = document.createElement('small');
+    button.textContent = poi.name || `未命名索道站 · OSM ${poi.id}`;
+    small.textContent = `${poi.type} · ${Math.round(hf.heightAt(poi.x, poi.z)).toLocaleString()} m`;
+    button.append(small);
+    button.addEventListener('click', () => {
+      setTool('objects');
+      objectsView.setSelected(`osm:${poi.id}`);
+      updatePanels();
+      frameSelection();
+    });
+    poiRoot.append(button);
+  });
+}
+function updateMapLabels() {
+  if (!koktokay) return;
+  const W = window.innerWidth, H = window.innerHeight;
+  if (!labelsDirty && labelPose.position.distanceToSquared(camera.position) < 1e-4 &&
+      Math.abs(labelPose.quaternion.dot(camera.quaternion)) > 0.9999999 &&
+      labelPose.tool === tool && labelPose.width === W && labelPose.height === H) return;
+  labelsDirty = false;
+  labelPose.position.copy(camera.position);
+  labelPose.quaternion.copy(camera.quaternion);
+  Object.assign(labelPose, { tool, width: W, height: H });
+  const overview = camera.position.distanceTo(controls.target) > 8000;
+  const occupied = [];
+  const place = (el, points, visible) => {
+    if (!visible || !points.length) { el.hidden = true; return; }
+    el.hidden = true;
+    for (const fraction of [0.5, 0.35, 0.65, 0.2, 0.8, 0.1, 0.9]) {
+      const [x, z] = pathAt(points, fraction);
+      labelPoint.set(x, hf.heightAt(x, z) + 16, z).project(camera);
+      const px = (labelPoint.x + 1) * W / 2, py = (1 - labelPoint.y) * H / 2;
+      if (labelPoint.z < -1 || labelPoint.z > 1 || px < 355 || px > W - 20 || py < 85 || py > H - 25) continue;
+      el.hidden = false;
+      el.style.left = `${px}px`;
+      el.style.top = `${py}px`;
+      const box = el.getBoundingClientRect();
+      if (occupied.some((b) => box.left < b.right + 4 && box.right + 4 > b.left && box.top < b.bottom + 3 && box.bottom + 3 > b.top)) { el.hidden = true; continue; }
+      occupied.push(box);
+      break;
+    }
+  };
+  const featured = new Set(['大狼王山谷（预估）', '小狼王山谷', '宝石大道', '可可托海大道']);
+  const order = map.runs.map((_, i) => i).sort((a, b) => Number(featured.has(map.runs[b].name)) - Number(featured.has(map.runs[a].name)));
+  order.forEach((i) => {
+    const r = map.runs[i];
+    place(runLabels[i], r.points, !!r.name && (!overview || featured.has(r.name)));
+  });
+  map.lifts.forEach((l, i) => place(liftLabels[i], l.points, tool === 'objects'));
+}
+if (koktokay) {
+  $('run-list').classList.remove('hidden');
+  $('lift-list').classList.remove('hidden');
+  $('poi-list').classList.remove('hidden');
+  renderFeatureLists();
+  map.runs.forEach((r) => runLabels.push(makeMapLabel(r.name || `OSM ${r.id}`, /狼王/.test(r.name || '') ? 'wolf' : 'run')));
+  map.lifts.forEach((l) => liftLabels.push(makeMapLabel(l.name || `索道 ${l.id}`, 'lift')));
+}
 const clock = new THREE.Clock();
 setTreeMode('select');
 setTool('tiles');
@@ -739,6 +862,7 @@ renderer.setAnimationLoop(() => {
   const near = THREE.MathUtils.clamp(camera.position.distanceTo(controls.target) * 0.004, 0.5, 40);
   if (Math.abs(near - camera.near) > near * 0.2) { camera.near = near; camera.updateProjectionMatrix(); }
   objectsView.update(camera, window.innerHeight);
+  updateMapLabels();
   placeLabel();
   renderer.render(scene, camera);
 });
