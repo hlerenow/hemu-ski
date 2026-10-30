@@ -54,7 +54,7 @@ export class BoardPose {
     // the left fingertips may brush snow; the right arm stays bent up/back.
     const tall = { py: 0.74 + breath, pz: edge < 0 ? 0.015 : -0.015,
       pPitch: edge < 0 ? -0.06 * TOE_ARCH : 0.025, pRoll: 0,
-      tPitch: edge < 0 ? -0.16 * TOE_ARCH : 0.04, tYaw: 0.12, tRoll: 0,
+      tPitch: edge < 0 ? -0.16 * TOE_ARCH - 0.12 : 0.04, tYaw: 0.12, tRoll: 0,
       hPitch: -0.08, kneeOut: 0.1, kneeShift: 0,
       legExtension: edge < 0 ? 0.9 : 0.96, crouch: 0.14 };
     for (const [key, target] of Object.entries(tall)) x[key] += (target - x[key]) * deep;
