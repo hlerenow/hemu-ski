@@ -2,6 +2,7 @@
 // Uses the actual female GLB rigs/clips (ski gear and swimsuit); omits only texture material references
 // so the regression runs in Node without browser image loaders or a WebGL context.
 import assert from 'node:assert/strict';
+import { BoardPose } from '../src/player/rider-board-pose.js';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
@@ -232,6 +233,55 @@ try {
   const maleGltf = await load('./player.glb');
   const male = new RiderModel(maleGltf, 'male', { borrow: gltf });
   assert.equal(male.canWalk, true, 'male rider must walk with the borrowed clips');
+  // The new board grab must make contact on both actual skinned body builds.
+  const joints = [rider.hips, rider.torso, rider.head, rider.armL.sh, rider.armL.el, rider.armR.sh, rider.armR.el];
+  const savedJoints = joints.map(j => ({ p: j.position.clone(), q: j.quaternion.clone() }));
+  const grabPose = new BoardPose().update(0, { air: true, grab: true, speed: 16 });
+  rider.hips.position.set(grabPose.px, grabPose.py, grabPose.pz);
+  rider.hips.rotation.set(grabPose.pPitch, grabPose.pYaw, grabPose.pRoll);
+  rider.torso.rotation.set(grabPose.tPitch, grabPose.tYaw, grabPose.tRoll);
+  rider.head.rotation.set(grabPose.hPitch, grabPose.hYaw, grabPose.hRoll);
+  rider.boardGrab = { weight: 1, target: new THREE.Vector3(-0.06, 0.15, 0.15) };
+  for (const [label, subject] of [['female', model], ['male', male]]) {
+    subject.apply(rider);
+    subject.root.updateMatrixWorld(true);
+    const gap = subject.palmAt('Right', new THREE.Vector3()).distanceTo(rider.boardGrab.target);
+    assert(gap < 0.13, `${label} grab palm reaches board edge: ${gap.toFixed(3)} m`);
+    console.log(`PASS ${label} snowboard grab: palm within ${(gap*100).toFixed(1)} cm of board edge`);
+  }
+  delete rider.boardGrab;
+  for (const [label, subject] of [['female', model], ['male', male]]) {
+    const pose = new BoardPose().update(0,{carve:true,lean:1,snowTouch:true,speed:16});
+    const b = subject.build;
+    rider.hips.position.set(pose.px, b.leg*0.96+b.ankle+b.hip[1], pose.pz);
+    rider.hips.rotation.set(pose.pPitch,pose.pYaw,pose.pRoll);
+    rider.torso.rotation.set(pose.tPitch,pose.tYaw,pose.tRoll);
+    const edge = new THREE.Group(), body = new THREE.Group();
+    edge.rotation.z = pose.edge; body.rotation.y = Math.PI/2; edge.add(body); body.add(subject.root);
+    rider.armL.sh.rotation.set(pose.lPitch,0,pose.lRoll);
+    rider.armL.el.rotation.set(pose.lElbow,0,0.1);
+    rider.armR.sh.rotation.set(pose.rPitch,0,pose.rRoll);
+    rider.armR.el.rotation.set(pose.rElbow,0,-0.1);
+    subject.apply(rider); clearGround(edge,{heightAt:()=>0});
+    const up = new THREE.Vector3(0,1,0).applyQuaternion(body.getWorldQuaternion(new THREE.Quaternion()));
+    const facing = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(new THREE.Vector3(0,0,-1), new THREE.Vector3(), up));
+    subject.lookAhead(facing);
+    const oriented = subject.bones.Head.bone.getWorldQuaternion(new THREE.Quaternion()).multiply(subject.bones.Head.modelQ.clone().invert());
+    assert(new THREE.Vector3(0,1,0).applyQuaternion(oriented).dot(up) > 0.99, `${label} head follows body inclination`);
+    const raised = ['RightArm','RightForeArm','RightHand'].map(n=>subject.bones[n].bone.quaternion.clone());
+    const target = subject.bones.LeftArm.bone.getWorldPosition(new THREE.Vector3()); target.y = 0.035;
+    subject.touchSnowTip(target,new THREE.Vector3(0,1,0),1,'Left');
+    const tip = subject.fingerTips.Left.getWorldPosition(new THREE.Vector3());
+    const palm = subject.palmAt('Left',new THREE.Vector3());
+    assert(Math.abs(tip.y-target.y) < 0.065, `${label} left fingertip brushes snow: ${tip.y.toFixed(3)}`);
+    assert(palm.y > tip.y + 0.03, `${label} palm remains above fingertips`);
+    ['RightArm','RightForeArm','RightHand'].forEach((n,i)=>assert(subject.bones[n].bone.quaternion.equals(raised[i]), `${label} raised right arm is unchanged by contact`));
+    body.remove(subject.root);
+    console.log(`PASS ${label} heel carve: inclined head, left fingertip ${(tip.y*100).toFixed(1)} cm above snow, raised palm, unchanged right arm`);
+  }
+
+  joints.forEach((j,i) => { j.position.copy(savedJoints[i].p); j.quaternion.copy(savedJoints[i].q); });
+
   const her = new RiderModel(gltf, 'female');
   const limbs = ['LeftUpLeg', 'LeftLeg', 'RightUpLeg', 'RightLeg', 'LeftArm', 'LeftForeArm', 'RightArm', 'RightForeArm', 'Spine1'];
   const dirOf = (subject, name) => {

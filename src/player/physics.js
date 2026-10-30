@@ -139,9 +139,10 @@ export class BoardPhysics {
     }
 
     const speed = this.vel.length();
-    // Turn rate limited so lean (v·ω/g) stays under ~55°.
+    // Shift carving doubles the ground turn rate on either snowboard edge.
     const maxRate = Math.min(2.2, 14 / Math.max(speed, 1)) * (this.gear === 'ski' ? 1.1 : 1);
-    let target = input.steer * maxRate;
+    const carve = this.gear === 'board' && this.grounded && input.carve;
+    let target = input.steer * maxRate * (carve ? 2 : 1);
     if (!this.grounded) target = input.steer * 4.5; // spins
     this.yawRate += (target - this.yawRate) * (1 - Math.exp(-dt * 7));
     this.yaw += this.yawRate * dt;
@@ -244,7 +245,7 @@ export class BoardPhysics {
     // Ollie: hold to load, release to pop.
     if (input.jump) this.jumpCharge = Math.min(1, this.jumpCharge + dt * 2.5);
     else if (this.jumpCharge > 0) {
-      this.vel.addScaledVector(n, 2.6 + this.jumpCharge * 2.6);
+      this.vel.addScaledVector(n, 3.0 + this.jumpCharge * 3.4);
       this.jumpCharge = 0;
       this.#takeoff();
       this.pos.addScaledVector(this.vel, dt);
@@ -326,10 +327,10 @@ export class BoardPhysics {
 
   #air(dt, input) {
     this.airTime += dt;
-    // Hold forward to chain rolls at a constant rate for the entire flight.
+    // Flip is an explicit trick input; forward only tucks/braces.
     // Releasing finishes the current rotation, then holds the upright pose.
     const turn = Math.PI * 2;
-    if (input.tuck) {
+    if (input.flip) {
       this.flip += turn / 0.9 * dt;
       this.flipTarget = Math.ceil((this.flip - 1e-8) / turn) * turn;
     } else if (this.flip < this.flipTarget) {

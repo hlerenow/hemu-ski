@@ -6,6 +6,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { makeToon } from '../render/toon.js';
 import { THROW, ON_FOOT, sample, throwWeight } from './throw.js';
+import { installHeadMask } from './ride-camera.js';
 
 // Size: by `trunk`, the Hips-to-Head joint length (metres), or else by
 // `height`, the whole model's. The male goes by his trunk, the same as the
@@ -111,6 +112,7 @@ export class RiderModel {
     });
     const missing = DRIVEN.filter((n) => !byName[n]);
     if (missing.length) throw new Error(`${wearing.file} is missing Mixamo bones: ${missing.join(', ')}`);
+    this.firstPersonMask = installHeadMask(scene, byName.Head);
     // The trunk, from the Hips joint up to the Head joint (model units): what
     // sizes another set of clothes to the rider's own, since neither a hat nor
     // boots reach it. The rider's own clothes go by their height.
@@ -216,6 +218,7 @@ export class RiderModel {
     // Wrist to the middle of the palm, where the grip goes.
     this.palm = byName.LeftHandMiddle1 ? pos('LeftHand').distanceTo(at(byName.LeftHandMiddle1)) * 0.6 : 0;
     this.palmBone = byName.RightHandMiddle1 ?? null; // toward it from the wrist: the middle of the palm
+    this.fingerTips = { Left: byName.LeftHandMiddle4 || byName.LeftHandMiddle3, Right: byName.RightHandMiddle4 || byName.RightHandMiddle3 };
     this.palmBones = { Left: byName.LeftHandMiddle1 ?? null, Right: this.palmBone };
     // The rider's build, for Rider's seated pose (body units): as its CLASSIC_BUILD.
     const S = this.scale;
@@ -513,6 +516,17 @@ export class RiderModel {
       for (const [i, side, sign] of [[0, 'Left', 1], [1, 'Right', -1]]) this.#armTo(side, sign, this.#fromBody(rider.skiHands[i], new THREE.Vector3()));
     }
 
+    // Grab contact uses this rig's own arm lengths, keeping the palm on the
+    // board rather than copying the primitive arm's shoulder angles.
+    if (!sitting && !rider.skiing && rider.boardGrab?.weight > 0.001) {
+      const w = rider.boardGrab.weight;
+      const bones = ['RightArm', 'RightForeArm', 'RightHand'].map(n => this.bones[n].bone);
+      const before = bones.map(b => b.quaternion.clone());
+      this.#armTo('Right', -1, this.#fromBody(rider.boardGrab.target, new THREE.Vector3()));
+      bones.forEach((b, i) => b.quaternion.slerpQuaternions(before[i], b.quaternion.clone(), w));
+      this.#fist(0.65 * w, ['Right']);
+    }
+
     // Legs: two-bone IK from each hip socket to the ankle above its binding.
     this.root.updateMatrixWorld(true);
     for (const [i, side, sign] of [[0, 'Left', 1], [1, 'Right', -1]]) {
@@ -724,6 +738,40 @@ export class RiderModel {
     bone.parent.getWorldQuaternion(_s).invert().multiply(turn).multiply(bone.getWorldQuaternion(_r));
     bone.quaternion.copy(_s);
     bone.updateMatrixWorld(true);
+  }
+
+  // A world-space facing frame independent of the leaned hips/spine.
+  lookAhead(frame, weight = 1) {
+    const head = this.bones.Head;
+    this.root.updateMatrixWorld(true);
+    const target = head.bone.parent.getWorldQuaternion(new THREE.Quaternion()).invert()
+      .multiply(frame).multiply(head.modelQ);
+    head.bone.quaternion.slerp(target, weight);
+    this.root.updateMatrixWorld(true);
+  }
+
+  // Light fingertip contact: the wrist/palm stay raised above the snow.
+  touchSnowTip(world, normal, weight, side = 'Right') {
+    this.root.updateMatrixWorld(true);
+    const names = [side + 'Arm', side + 'ForeArm', side + 'Hand'];
+    const before = names.map(name => this.bones[name].bone.quaternion.clone());
+    const hand = this.bones[side + 'Hand'].bone;
+    const tip = this.fingerTips[side];
+    if (!tip) return;
+    const wrist = hand.getWorldPosition(new THREE.Vector3());
+    const length = tip.getWorldPosition(new THREE.Vector3()).distanceTo(wrist);
+    const wristTarget = world.clone().addScaledVector(normal, length);
+    this.#armTo(side, side === 'Left' ? 1 : -1, this.root.worldToLocal(wristTarget), null, true);
+    this.root.updateMatrixWorld(true);
+    hand.getWorldPosition(wrist);
+    const from = tip.getWorldPosition(new THREE.Vector3()).sub(wrist).normalize();
+    const to = world.clone().sub(wrist).normalize();
+    this.#turnWorld(hand, new THREE.Quaternion().setFromUnitVectors(from, to));
+    names.forEach((name, i) => {
+      const bone = this.bones[name].bone;
+      bone.quaternion.slerpQuaternions(before[i], bone.quaternion.clone(), weight);
+    });
+    this.root.updateMatrixWorld(true);
   }
 
   // A world-space hand contact during a fall, layered over the pose.
