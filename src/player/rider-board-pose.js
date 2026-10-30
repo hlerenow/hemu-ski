@@ -49,11 +49,11 @@ export class BoardPose {
       rRoll: -0.85 - carve * 0.3 + tuck * 0.72 + flight * 0.15,
       rElbow: -0.65 - tuck * 0.85 - flight * 0.3,
     });
-    // Toe edge: extend through the hips with a slight back arch. Heel edge:
+    // Toe edge: extend through the hips with a pronounced back arch. Heel edge:
     // the left fingertips may brush snow; the right arm stays bent up/back.
     const tall = { py: 0.74 + breath, pz: edge < 0 ? 0.015 : -0.015,
-      pPitch: edge < 0 ? -0.06 : 0.025, pRoll: 0,
-      tPitch: edge < 0 ? -0.16 : 0.04, tYaw: 0.12, tRoll: 0,
+      pPitch: edge < 0 ? -0.12 : 0.025, pRoll: 0,
+      tPitch: edge < 0 ? -0.32 : 0.04, tYaw: 0.12, tRoll: 0,
       hPitch: -0.08, kneeOut: 0.1, kneeShift: 0, crouch: 0.14 };
     for (const [key, target] of Object.entries(tall)) x[key] += (target - x[key]) * deep;
     if (edge > 0) for (const [key, target] of Object.entries({rPitch: -0.85, rRoll: -1.85, rElbow: -1.35})) {
