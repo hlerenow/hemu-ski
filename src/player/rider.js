@@ -656,7 +656,7 @@ export class Rider {
     const x = this.boardPose.update(dt, s, this.t);
     this.edge.rotation.z = x.edge;
     const build = this.build;
-    const extendedHipY = build.leg * 0.96 + build.ankle + (build.hip?.[1] || 0);
+    const extendedHipY = build.leg * x.legExtension + build.ankle + (build.hip?.[1] || 0);
     this.hips.position.set(x.px, x.py + (extendedHipY - 0.74) * x.deep, x.pz);
     this.hips.rotation.set(x.pPitch, x.pYaw, x.pRoll);
     this.torso.rotation.set(x.tPitch, x.tYaw, x.tRoll);
