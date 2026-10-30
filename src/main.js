@@ -348,6 +348,7 @@ window.addEventListener('keydown', (e) => {
 // What a key press does, beyond the key being held. The touch buttons, the
 // prompt and the menu press keys through here too, so a tap does what the key does.
 function act(code, repeat = false) {
+  if (code === 'KeyV' && !repeat) { toggleView(); return; }
   if ((code === 'Enter' || code === 'Space') && state === 'title') { begin(); return; }
   if ((code === 'Enter' || code === 'Space' || code === 'Escape') && state === 'swoop') { swoop.t = 1; return; }
   if ((code === 'Enter' || code === 'Space' || code === 'Escape') && state === 'arrive') { arrival.t = 1; return; }
@@ -409,7 +410,7 @@ const touch = new TouchPad({
   onMode: (on) => hud.setTouch(on),
 });
 hud.setTouch(touch.on);
-const input = { steer: 0, tuck: false, brake: false, jump: false, walk: false, run: false };
+const input = { steer: 0, tuck: false, brake: false, jump: false, flip: false, grab: false, carve: false, walk: false, run: false };
 const pedals = { throttle: false, reverse: false, steer: 0, handbrake: false, climb: false, sink: false }; // driving and flying
 function readInput() {
   const L = keys.has('KeyA') || keys.has('ArrowLeft');
@@ -420,6 +421,9 @@ function readInput() {
   input.tuck = keys.has('KeyW') || keys.has('ArrowUp') || t.up;
   input.brake = keys.has('KeyS') || keys.has('ArrowDown') || t.down;
   input.jump = keys.has('Space') || t.big;
+  input.flip = keys.has('KeyX') || t.alt;
+  input.grab = shift || t.low;
+  input.carve = shift || t.low;
   input.walk = input.tuck;
   input.run = shift || t.full; // on foot, the stick pushed all the way out runs
   // Throwing on foot, the feet are busy with the throw.
@@ -584,6 +588,23 @@ window.addEventListener('pagehide', saveWeather);
 // driving or soaking takes the pointer and the mouse swings the camera round
 // you. Remembered between visits.
 const mouseLook = new MouseLook(canvas);
+const viewButton = document.getElementById('view-toggle');
+function updateViewButton() {
+  viewButton.textContent = firstPerson ? '切到第三视角 V' : '切到第一视角 V';
+  viewButton.setAttribute('aria-pressed', String(firstPerson));
+}
+function toggleView() {
+  firstPerson = !firstPerson;
+  const url = new URL(location.href);
+  if (firstPerson) url.searchParams.set('view', 'first'); else url.searchParams.delete('view');
+  history.replaceState(null, '', url);
+  if (!firstPerson && !mouseLook.on) mouseLook.set(false);
+  mouseLook.reset();
+  if (state === 'ride') { mouseLook.force = firstPerson; snapCamera(); }
+  updateViewButton();
+}
+viewButton.addEventListener('click', () => { toggleView(); viewButton.blur(); });
+updateViewButton();
 mouseLook.wanted = () => state === 'ride' || state === 'drive' || state === 'horse' || state === 'soak' || state === 'lift';
 {
   const box = document.getElementById('set-mouselook');
@@ -712,6 +733,7 @@ const introPanel = () => showPanel('Hemu · 禾木', `
 // ---------- Camera ----------
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _look = new THREE.Vector3();
 const camLook = new THREE.Vector3();
+const eye = new THREE.Vector3();
 // How far the screen is toward a phone held upright: 0 when it's square or
 // wider, 1 at 9:19.5. A tall, narrow view sees little of the slope either side,
 // so as this grows the cameras pull back, rise, look further ahead and widen
@@ -723,6 +745,11 @@ const portrait = () => THREE.MathUtils.clamp((1 - camera.aspect) / 0.54, 0, 1);
 let indoors = 0;
 const INDOORS = { dist: 2.4, up: 0.55, ahead: 1.6, look: 0.35 };
 function cameraTarget(out, look) {
+  if (firstPerson && state === 'ride' && phys.crashed <= 0) {
+    firstPersonTarget({ eye: rider.eyePosition(eye, camDir), forward: camDir, normal: phys.normal, yaw: mouseLook.yaw, pitch: mouseLook.pitch }, out, look);
+    out.y = Math.max(out.y, detail.heightAt(out.x, out.z) + 0.12);
+    return;
+  }
   const sp = phys.speed, p = portrait(), k = indoors;
   const d = THREE.MathUtils.lerp(4.6 + p * 3.4 + Math.min(sp, 30) * 0.07, INDOORS.dist, k);
   out.copy(phys.pos).addScaledVector(camDir, -d);
@@ -898,6 +925,7 @@ if (new URLSearchParams(location.search).has('notitle')) {
 }
 
 function updateRideCamera(dt) {
+  mouseLook.force = firstPerson || false;
   const sp = phys.speed;
   _v.copy(phys.vel).setY(0);
   if (rider.locomotion === 'walk') {
@@ -908,6 +936,15 @@ function updateRideCamera(dt) {
     camDir.lerp(_v, 1 - Math.exp(-dt * 2.2)).normalize();
   }
   indoors += (roomAt(phys.pos.x, phys.pos.z) - indoors) * (1 - Math.exp(-dt * 2.5));
+  if (firstPerson && phys.crashed <= 0) {
+    mouseLook.take();
+    cameraTarget(camera.position, camLook);
+    camera.lookAt(camLook);
+    camera.fov = 88 + Math.min(sp, 30) * 0.1;
+    camera.near = 0.04;
+    camera.updateProjectionMatrix();
+    return;
+  }
   swingCamera(ridePivot(_pv));
   cameraTarget(_w, _look);
   camera.position.lerp(_w, 1 - Math.exp(-dt * (6 + indoors * 3)));
@@ -954,7 +991,7 @@ function poseRider(dt, snap = false) {
     roll: -phys.flip,
     fall: falling ? { time: fallTime, motion: phys.crashMotion } : null,
     shakeTime: phys.shakeOff > 0 ? SHAKE_DURATION - phys.shakeOff : null,
-    protective: falling ? 0 : (phys.flip > 0 && (input.tuck || phys.flip < phys.flipTarget) ? 1 : 0),
+    protective: falling ? 0 : (phys.flip > 0 && (input.flip || phys.flip < phys.flipTarget) ? 1 : 0),
     air: !walking && !phys.grounded,
     locomotion: rider.locomotion,
     speed: sp,
@@ -962,10 +999,12 @@ function poseRider(dt, snap = false) {
     brake: state === 'ride' && input.brake && phys.grounded,
     tuck: state === 'ride' && input.tuck,
     charge: phys.jumpCharge,
+    grab: input.grab && !phys.grounded,
+    carve: input.carve && phys.grounded && !walking,
     slip: phys.slip,
     landing: phys.landingRecovery,
   });
-  if (falling || phys.flip > 0 || phys.landingRecovery > 0) rider.clearGround(phys.hf, falling);
+  if (falling || phys.flip > 0 || phys.landingRecovery > 0 || rider.boardPose.x.deep > 0.01 || rider.snowTouch.weight > 0.001) rider.clearGround(phys.hf, falling);
 }
 
 // ---------- Powder ----------
@@ -1030,9 +1069,9 @@ function frame() {
       }
       if (ev.type === 'air') {
         const tricks = [];
-        if (ev.frontRolls > 0) tricks.push(`Front Roll ×${ev.frontRolls} (${ev.frontRolls * 360}°)`);
+        if (ev.frontRolls > 0) tricks.push(`前空翻 ×${ev.frontRolls} (${ev.frontRolls * 360}°)`);
         if (ev.spin >= 180) tricks.push(`${ev.spin}°`);
-        hud.toast(tricks.length ? `${tricks.join(' + ')}!` : `Air ${ev.time.toFixed(1)}s`);
+        hud.toast(tricks.length ? `${tricks.join(' + ')}!` : `平跳滞空 ${ev.time.toFixed(1)} 秒`);
       }
       if (ev.type === 'land' && phys.powder > 0.3) {
         _sv.copy(phys.vel).multiplyScalar(0.15);
@@ -1186,7 +1225,9 @@ function frame() {
   updateWeatherPanel();
 
   // Normal-edge lines fade out by ~600 m, so far geometry can skip that pass.
+  rider.firstPersonBody(firstPerson && state === 'ride' && phys.crashed <= 0);
   post.render(scene, camera, time, [sky, weather.snowfall.points, spray.points, dog.spray.points, ...(foxes ? [foxes.spray.points] : []), ...(horse ? horse.sprays : []), specks.points, backdrop, ripples.group, ...forest.farMeshes, ...marks.hidden]);
+  rider.firstPersonBody(false);
   requestAnimationFrame(frame);
 }
 
@@ -1211,7 +1252,8 @@ function touchLayout() {
     touch.layout({
       layout: walking ? 'walk' : 'board',
       big: walking ? 'board' : 'ollie',
-      alt: dogAround ? 'throw' : null,
+      alt: !walking && !phys.grounded ? 'flip' : dogAround ? 'throw' : null,
+      low: !walking ? (phys.grounded ? 'carve' : 'grab') : null,
       aux: !walking && rider.canWalk ? 'foot' : null,
       act,
     });

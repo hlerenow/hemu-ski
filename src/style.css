@@ -637,3 +637,7 @@ body.touch #bigmap .dest .clear { min-height: 36px; }
 #menu .action-shortcuts { display: grid; gap: 6px; margin-bottom: 10px; }
 #menu .action-shortcuts label { display: flex; align-items: center; gap: 8px; }
 #menu .action-shortcuts select { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--ink); background: white; border: 2px solid var(--ink); }
+
+.game-map-choice button { font: inherit; border: 1px solid var(--ink); color: var(--ink); background: #fff; cursor: pointer; padding: 4px 7px; white-space: nowrap; }
+.game-map-choice button[aria-pressed="true"] { background: var(--accent); }
+@media (max-width: 540px) { .game-map-choice { top: 8px; gap: 4px; padding: 4px 6px; font-size: 12px; max-width: calc(100vw - 20px); } .game-map-choice select { max-width: 108px; } }

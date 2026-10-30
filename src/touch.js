@@ -35,7 +35,10 @@ const ICONS = {
 // What each button can be: its label and icon, and whether it's held (read as
 // a key) or tapped.
 const KINDS = {
-  ollie: { label: 'Ollie', icon: 'ollie', hold: true },
+  carve: { label: '刻滑', icon: 'board', hold: true },
+  grab: { label: '抓板', icon: 'board', hold: true },
+  flip: { label: '空翻', icon: 'wheel', hold: true },
+  ollie: { label: '蓄力跳跃', icon: 'ollie', hold: true },
   handbrake: { label: 'Handbrake', icon: 'brake', hold: true },
   hold: { label: 'Hold water', icon: 'brake', hold: true }, // the boat's oars held in the water
   up: { label: 'Up', icon: 'up', hold: true },
@@ -58,7 +61,7 @@ export class TouchPad {
     this.buttons = {};
     this.shown = {}; // name → what it shows now, so the DOM changes only when that does
     this.specs = {}; // name → the button's spec, or null
-    this.held = { big: false, low: false };
+    this.held = { big: false, low: false, alt: false };
     this.stick = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
     this.visible = false;
     this.on = false;
@@ -117,6 +120,7 @@ export class TouchPad {
       full: Math.hypot(x, y) > FULL,
       big: this.held.big && !!this.#kind('big')?.hold,
       low: this.held.low,
+      alt: this.held.alt,
     };
   }
 
@@ -153,6 +157,7 @@ export class TouchPad {
     this.#reset();
     this.#hold('big', false);
     this.#hold('low', false);
+    this.#hold('alt', false);
   }
 
   #kind(name) { return this.specs[name] ?? null; }

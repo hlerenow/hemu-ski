@@ -6,6 +6,7 @@
 // with orange straps.
 // Built from primitives so it matches the flat cel-shaded world.
 import * as THREE from 'three';
+import { BoardPose } from './rider-board-pose.js';
 import { makeToon } from '../render/toon.js';
 import { fallPose, applyFallPose, applyShakePose, placeAssembly, handOnSnow } from './fall.js';
 import { clearGround, rollAssembly } from './rider-contact.js';
@@ -147,6 +148,23 @@ function boardGeometry() {
 }
 
 export class Rider {
+  // Head socket plus the eye's offset, measured in metres for either rig.
+  eyePosition(out, forward) {
+    this.root.updateMatrixWorld(true);
+    const bone = this.model?.bones.Head;
+    const head = bone?.bone || this.head;
+    const frame = head.getWorldQuaternion(new THREE.Quaternion());
+    if (bone) frame.multiply(bone.modelQ.clone().invert());
+    head.getWorldPosition(out);
+    out.addScaledVector(new THREE.Vector3(0, 1, 0).applyQuaternion(frame), bone ? 0.12 : 0.2);
+    return out.addScaledVector(forward, 0.1);
+  }
+
+  firstPersonBody(enabled) {
+    this.head.visible = !enabled;
+    if (this.model) this.model.firstPersonMask.value = enabled ? 1 : 0;
+  }
+
   // `model: true` swaps the primitive body for the rigged Tripo character once
   // public/models/player.glb has loaded; the primitive one stays as the fallback.
   constructor({ model = false } = {}) {
@@ -176,6 +194,9 @@ export class Rider {
     // and a pole in each hand. `gear` says which you ride: 'board' or 'ski'.
     this.gear = 'board';
     this.skiPose = new SkiPose();
+    this.boardPose = new BoardPose();
+    this.snowTouch = { target: new THREE.Vector3(), weight: 0 };
+    this.boardGrab = { target: new THREE.Vector3(-0.06, 0.15, 0.15), weight: 0 };
     this.skis = this.feet.map((f) => { const ski = makeSki(); ski.position.z = 0.02; f.add(ski); return ski; });
     this.poles = [makePole(), makePole()];
     this.body.add(...this.poles);
@@ -328,7 +349,7 @@ export class Rider {
     const liftSeat = mode === 'sit' && !!seat?.lift;
     this.proceduralBoard.position.set(0, liftSeat ? -0.48 : 0, liftSeat ? -0.48 : 0);
     this.proceduralBoard.rotation.y = liftSeat ? Math.PI / 2 : 0;
-    this.skiPose.snap = true;
+    this.skiPose.snap = this.boardPose.snap = true;
     this.#gearVisibility();
     return true;
   }
@@ -344,7 +365,7 @@ export class Rider {
   // 'board' or 'ski': what you ride down on.
   setGear(gear) {
     this.gear = gear === 'ski' ? 'ski' : 'board';
-    this.skiPose.snap = true;
+    this.skiPose.snap = this.boardPose.snap = true;
     if (this.locomotion !== 'sit') this.#standOnBoard();
     this.#gearVisibility();
   }
@@ -509,6 +530,8 @@ export class Rider {
   update(dt, s) {
     this.t += dt;
     const p = this.pose;
+    this.boardGrab.weight = 0;
+    this.snowTouch.weight = 0;
     const k = 1 - Math.exp(-dt * 10);
     p.crouch += (s.crouch - p.crouch) * k;
     p.lean += (s.lean - p.lean) * (1 - Math.exp(-dt * 8));
@@ -518,7 +541,7 @@ export class Rider {
     const sitting = this.locomotion === 'sit', skiing = this.skiing;
     if (sitting) this.#sit(p);
     else if (skiing) this.#ski(dt, s);
-    else this.#carve(p);
+    else this.#carve(dt, s);
     // Fold the articulated rig into a protective tuck while rolling.
     const protect = s.protective || 0;
     this.torso.rotation.x += protect * 0.2;
@@ -535,8 +558,8 @@ export class Rider {
     // Legs: two-bone IK from hip socket to ankle, knees driven forward (and
     // out round the seat when sitting).
     const fwd = new THREE.Vector3(0, 0, 1);
-    this.kneeOut = sitting ? this.seat.kneeOut ?? 0.45 : skiing ? this.skiPose.x.kneeOut : 0.12;
-    this.kneeShift = skiing ? this.skiPose.x.kneeShift : 0;
+    this.kneeOut = sitting ? this.seat.kneeOut ?? 0.45 : skiing ? this.skiPose.x.kneeOut : this.boardPose.x.kneeOut ?? 0.12;
+    this.kneeShift = skiing ? this.skiPose.x.kneeShift : this.boardPose.x.kneeShift ?? 0;
     for (let i = 0; i < 2; i++) {
       const side = i === 0 ? 1 : -1;
       const hip = new THREE.Vector3(0.12 * side, 0, 0).applyEuler(this.hips.rotation).add(this.hips.position);
@@ -583,6 +606,16 @@ export class Rider {
     // On skis the rig's hands go where the classic mitts got to (see RiderModel).
     this.skiHands = skiing && !this.fall ? [this.#mitt(this.armL, this.skiHand[0]), this.#mitt(this.armR, this.skiHand[1])] : null;
     this.model?.update(dt, this, this.locomotion, s.speed || 0);
+    if (!skiing && !sitting && !afoot && !this.fall && this.boardPose.x.deep > 0.001) {
+      // Turn toward the nose while keeping the head inclined with the spine.
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.root.quaternion);
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.torso.getWorldQuaternion(new THREE.Quaternion()));
+      const frame = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(forward, new THREE.Vector3(), up));
+      this.root.updateMatrixWorld(true);
+      const local = this.head.parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(frame);
+      this.head.quaternion.slerp(local, this.boardPose.x.deep);
+      this.model?.lookAhead(frame, this.boardPose.x.deep);
+    }
     if (skiing) this.#poles();
   }
 
@@ -597,30 +630,51 @@ export class Rider {
       // Recheck clothing after the arm IK.
       clearGround(this.root, hf);
     }
+    if (this.snowTouch.weight > 0.001 && !this.fall) {
+      // Ground-space IK follows the local snow height, including edited slopes.
+      const shoulder = this.model?.bones.LeftArm.bone || this.armL.sh;
+      shoulder.getWorldPosition(this.snowTouch.target);
+      const target = this.snowTouch.target;
+      target.y = hf.heightAt(target.x, target.z) + (this.model ? 0.035 : 0.075);
+      if (this.model) {
+        const normal = hf.normalAt ? hf.normalAt(target.x, target.z, new THREE.Vector3()) : new THREE.Vector3(0, 1, 0);
+        this.model.touchSnowTip(target, normal, this.snowTouch.weight, 'Left');
+      }
+      else {
+        const arm = this.armL, before = [arm.sh.quaternion.clone(), arm.el.quaternion.clone()];
+        this.#grip(arm, this.body.worldToLocal(target.clone()), 1);
+        [arm.sh, arm.el].forEach((joint, i) => joint.quaternion.slerpQuaternions(before[i], joint.quaternion.clone(), this.snowTouch.weight));
+      }
+      clearGround(this.root, hf);
+    }
     return lift;
   }
 
-  // On the board: edged over by `lean`, crouched, arms out for balance.
-  #carve(p) {
+  // Carve, glide, tuck, preload, neutral air, grab and landing share a rig.
+  #carve(dt, s) {
     this.#standOnBoard();
-    this.edge.rotation.z = p.lean; // roll about the travel axis
-    const c = Math.min(1, p.crouch + p.air * 0.35);
-
-    // Hips drop and sit back with crouch; torso folds forward.
-    const hipY = 0.76 - c * 0.24;
-    this.hips.position.set(0.02, hipY, -0.1 - c * 0.08);
-    this.hips.rotation.set(0, 0.3 + p.twist * 0.3, 0);
-    this.torso.rotation.set(0.45 + c * 0.45, 0.25 + p.twist * 0.25, 0);
-    this.head.rotation.set(-0.3 - c * 0.35, 0.55 - p.twist * 0.3, 0); // look down the nose
-
-    // Arms out for balance, swinging with the edge change; tucked in the air.
-    const sway = Math.sin(this.t * 2.1) * 0.05;
-    const air = p.air;
+    const x = this.boardPose.update(dt, s, this.t);
+    this.edge.rotation.z = x.edge;
+    const build = this.build;
+    const extendedHipY = build.leg * 0.96 + build.ankle + (build.hip?.[1] || 0);
+    this.hips.position.set(x.px, x.py + (extendedHipY - 0.74) * x.deep, x.pz);
+    this.hips.rotation.set(x.pPitch, x.pYaw, x.pRoll);
+    this.torso.rotation.set(x.tPitch, x.tYaw, x.tRoll);
+    this.head.rotation.set(x.hPitch, x.hYaw, x.hRoll);
     const L = this.armL, R = this.armR;
-    L.sh.rotation.set(-0.5 - p.lean * 0.6 - air * 0.6, 0, 1.15 - air * 0.5 + sway);
-    L.el.rotation.set(-0.35, 0, 0.1);
-    R.sh.rotation.set(-0.9 + p.lean * 0.5 - air * 0.4, 0, -0.75 + air * 0.2 - sway);
-    R.el.rotation.set(-1.0 - air * 0.4, 0, -0.2);
+    L.sh.rotation.set(x.lPitch, 0, x.lRoll);
+    L.el.rotation.set(x.lElbow, 0, 0.1);
+    R.sh.rotation.set(x.rPitch, 0, x.rRoll);
+    R.el.rotation.set(x.rElbow, 0, -0.1);
+    this.snowTouch.weight = s.carve && !s.air && !s.fall && this.locomotion === 'ride' ? x.touch : 0;
+    this.boardGrab.weight = s.fall ? 0 : x.grab;
+    if (x.grab > 0.001) {
+      // Trailing hand reaches the toe edge between the bindings.
+      const sh = R.sh.rotation.clone(), el = R.el.rotation.clone();
+      this.#grip(R, _t.set(-0.06, 0.15, 0.15), -1);
+      R.sh.rotation.set(sh.x + (R.sh.rotation.x-sh.x)*x.grab, sh.y + (R.sh.rotation.y-sh.y)*x.grab, sh.z + (R.sh.rotation.z-sh.z)*x.grab);
+      R.el.rotation.set(el.x + (R.el.rotation.x-el.x)*x.grab, el.y + (R.el.rotation.y-el.y)*x.grab, el.z + (R.el.rotation.z-el.z)*x.grab);
+    }
   }
 
   // On skis: the sprung pose from rider-skis.js. The whole skier leans into

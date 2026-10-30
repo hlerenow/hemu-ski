@@ -7,6 +7,20 @@ try {
   const { BoardPhysics } = await server.ssrLoadModule('/src/player/physics.js');
   const hf = { half: 500, center: [0, 0], heightAt: () => 0, normalAt: (x, z, out) => out.set(0, 1, 0), holeAt: () => false };
   const make = () => new BoardPhysics({ hf, piste: { distAt: () => 0, groomAt: () => 1 }, forest: { hit: () => null } });
+  // Compare heading accumulated at the same speed and steering input.
+  for (const steer of [-1, 1]) for (const speed of [4, 12, 25]) {
+    const normal = make(), carve = make();
+    for (const p of [normal, carve]) p.reset(0, 0, 0);
+    for (let i = 0; i < 60; i++) for (const [p, held] of [[normal, false], [carve, true]]) {
+      p.forward(p.vel).multiplyScalar(speed);
+      p.step(1/120, {steer, carve: held});
+    }
+    assert(Math.abs(carve.yaw - normal.yaw * 2) < 1e-9, `both edges carve through twice the angle at ${speed} m/s`);
+    for (const p of [normal, carve]) { p.grounded = false; p.pos.y = 100; p.yaw = p.yawRate = 0; }
+    normal.step(1/120, {steer}); carve.step(1/120, {steer, carve:true});
+    assert.equal(carve.yawRate, normal.yawRate, 'Shift carving leaves airborne spins unchanged');
+  }
+  console.log('PASS front/back edge carving doubles the ground turn angle at matched speeds');
   function drop({ impact = 20, sideways = false, tuck = false } = {}) {
     const p = make(); p.reset(0, 0, 0); p.grounded = false; p.takeoffYaw = 0;
     p.airTime = 4; p.pos.y = 0.01; p.vel.set(sideways ? 15 : 0, -impact, sideways ? 0 : -15);
@@ -21,20 +35,32 @@ try {
   const p = make(); p.reset(0, 0, 0); p.grounded = false; p.takeoffYaw = 0; p.pos.y = 4; p.vel.set(0, 9, -12);
   let maxFlip = 0, landed = false;
   for (let i = 0; i < 600; i++) {
-    p.step(1 / 120, { steer: 0, tuck: true }); maxFlip = Math.max(maxFlip, p.flip);
+    p.step(1 / 120, { steer: 0, tuck: true, flip: true }); maxFlip = Math.max(maxFlip, p.flip);
     if (p.grounded) { landed = true; break; }
   }
-  assert(landed && p.crashed === 0); assert(maxFlip > Math.PI * 4, 'holding forward chains multiple front rolls');
+  assert(landed && p.crashed === 0); assert(maxFlip > Math.PI * 4, 'holding flip chains multiple front rolls');
   assert.equal(p.events.find(e => e.type === 'air').frontRolls, Math.floor((maxFlip + Math.PI * 2 / 0.9 / 120 + 1e-8) / (Math.PI * 2)), 'landing reports completed rolls including the landing step'); assert.equal(p.flip, 0);
+  // Forward no longer starts a trick: a charged ollie can remain upright.
+  const neutral = make(); neutral.reset(0, 0, 0); neutral.vel.set(0,0,-8);
+  for (let i=0;i<60;i++) neutral.step(1/120, {steer:0,tuck:true,jump:true});
+  let flight = 0;
+  for (let i=0;i<600;i++) {
+    neutral.step(1/120, {steer:0,tuck:true,jump:false});
+    assert.equal(neutral.flip, 0, 'holding forward through an ollie never auto-flips');
+    if (!neutral.grounded) flight += 1/120;
+    else if (flight > 0) break;
+  }
+  assert(flight > 1, 'a charged jump has time for an upright air pose');
+  assert.equal(neutral.crashed, 0, 'neutral ollie lands cleanly');
   const short = make(); short.reset(0, 0, 0); short.grounded = false; short.pos.y = 0.1; short.vel.y = -1;
-  short.step(1 / 120, { steer: 0, tuck: true }); assert(short.flip > 0, 'forward starts rolling even late in flight');
-  for (let i = 0; i < 30 && !short.grounded; i++) short.step(1 / 120, { steer: 0, tuck: true });
+  short.step(1 / 120, { steer: 0, flip: true }); assert(short.flip > 0, 'explicit flip starts rolling even late in flight');
+  for (let i = 0; i < 30 && !short.grounded; i++) short.step(1 / 120, { steer: 0, flip: true });
   assert(!short.events.some(e => e.type === 'air' && e.frontRolls > 0), 'partial roll earns no completed roll');
   const released = make(); released.reset(0, 0, 0); released.grounded = false; released.pos.y = 100; released.takeoffYaw = 0;
-  for (let i = 0; i < 150; i++) released.step(1 / 120, { steer: 0, tuck: i < 30 });
+  for (let i = 0; i < 150; i++) released.step(1 / 120, { steer: 0, flip: i < 30 });
   assert.equal(released.flip, Math.PI * 2, 'release finishes the current roll then stops');
-  released.step(1 / 120, { steer: 0, tuck: true });
-  assert(released.flip > Math.PI * 2, 'pressing forward again resumes rolling');
+  released.step(1 / 120, { steer: 0, flip: true });
+  assert(released.flip > Math.PI * 2, 'pressing flip again resumes rolling');
   released.reset(0, 0, 0);
   assert.equal(released.flipTarget, 0, 'reset clears pending rolls');
   p.reset(459.9, 0, 0); p.vel.set(25, -25, 0); p.crash('test');
