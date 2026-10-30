@@ -1,7 +1,7 @@
 // Board frame: body +z points over the toes. Negative edge roll inclines
 // toward the toe edge; Shift deepens the turn while keeping the spine tall.
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
-const TOE_ARCH = 8; // Multiplier of the original hip/spine back-arch angles.
+const TOE_ARCH = 4; // Multiplier of the original hip/spine back-arch angles.
 export class BoardPose {
   constructor() {
     this.state = { edge: 0, deep: 0, tuck: 0, compression: 0, air: 0, grab: 0, touch: 0, twist: 0 };
