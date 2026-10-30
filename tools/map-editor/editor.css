@@ -92,3 +92,15 @@
   .ed-top { left: 16px; right: 16px; flex-wrap: wrap; }
   .ed-help { display: none; }
 }
+
+/* Keep every control inside the panel at desktop and narrow widths. */
+.ed-tools { box-sizing: border-box; width: min(360px, calc(100vw - 36px)); max-height: calc(100dvh - 100px); overflow-y: auto; overflow-x: hidden; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; padding-top: 28px; }
+.ed-tools .tab { position: static; display: inline-block; margin: -20px 0 14px; font-family: inherit; }
+.ed-toolrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ed-toolrow button { min-width: 0; white-space: normal; overflow-wrap: anywhere; font-size: 14px; padding: 5px 2px; }
+.ed-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ed-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ed-card button, .ed-feature-list button { box-sizing: border-box; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.ed-top { max-width: calc(100vw - 36px); box-sizing: border-box; flex-wrap: wrap; }
+.ed-params input { flex-shrink: 0; }
+@media (max-width: 640px) { .ed-tools { top: 112px; left: 16px; width: calc(100vw - 32px); max-height: calc(100dvh - 164px); } }

@@ -1,3 +1,4 @@
+import '../../src/ui-zh.js';
 // Map editor: a top-down working view of the game's map, for deleting tiles,
 // raising and lowering them, reshaping the runs (their line and the ground
 // under them), removing and planting trees, and moving the lift stations and

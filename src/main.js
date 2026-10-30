@@ -1,3 +1,4 @@
+import './ui-zh.js';
 import * as THREE from 'three';
 import { SERVICE_CENTRES, PISTE_HALF_WIDTH, ONSEN } from './world/data.js';
 import { loadResort, createResort, along, MAIN_RUN, TREELINE, startingRun } from './world/resort.js';
@@ -600,7 +601,7 @@ const MOVES = {
     + '<path d="M26 15l5 13-5-3-5 3z" fill="#f0c24a"/>',
 };
 const move = (name) => `<svg viewBox="0 0 52 52" aria-hidden="true">${MOVES[name]}</svg>`;
-const introPanel = () => touch.on ? showPanel('Hemu · 禾木', `
+const introPanel = () => koktokay ? showPanel('可可托海国际滑雪场', `<p>从<b>${mainRun.name}</b>出发，当前海拔 ${Math.round(detail.heightAt(startAt.x, startAt.z))} 米。</p><p>按 W 蹬行或压低重心，A / D 转弯，空格蓄力起跳，F 切换步行，R 返回出发点。靠近索道下站按 E 乘坐缆车，按 M 打开全图。</p><p>地形来自真实高程数据，雪道和索道来自 OSM；大厅和树林的位置为估计。</p>`, startRun, '开始滑行 ▸') : touch.on ? showPanel('Hemu · 禾木', `
   <p>Top of <b>Gondola No. 6</b>, 2,756 m. The whole mountain is yours, all the way down to the <b>East Service Centre</b>.</p>
   <div class="keys moves">
     ${move('stick')}<span><b>Drag</b> anywhere low on the left: sideways to carve, push up to tuck, pull back to skid</span>
