@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "fetch-data": "node tools/terrain/fetch-data.mjs",
     "fetch-koktokay": "node tools/terrain/fetch-data.mjs --koktokay",
-    "test": "node tests/rider-animation.mjs && node tests/landing-recovery.mjs"
+    "test": "node tests/loading-icons.mjs && node tests/rider-animation.mjs && node tests/rider-model-options.mjs && node tests/landing-recovery.mjs && node tests/chairlift.mjs && node tests/gondola-clearance.mjs && node tests/chair-sitting-animation.mjs && node tests/snow-trail.mjs"
   },
   "dependencies": {
     "three": "^0.186.1"

@@ -5,9 +5,12 @@
 // here) changes the diorama's with it. The summit review reads the ground from
 // here too.
 import * as THREE from 'three';
-import { loadWorld, PisteField, SERVICE_CENTRES, ONSEN, placeOf } from './data.js';
+import { loadWorld, PisteField, SERVICE_CENTRES, ONSEN, PISTE_HALF_WIDTH, placeOf } from './data.js';
 import { raiseBanks, gameClearings } from './banks.js';
 import { shapeSummit, createSummit } from './summit.js';
+import { shapeChairliftStations } from './chairlift-terrain.js';
+import { MODERN_GONDOLAS, shapeGondolaStations, offPisteSites } from './gondola-path.js';
+import { liftStations } from './stations.js';
 import { shapeLakes, createLakes, overWater, mooring } from './lakes.js';
 import { createDetailTerrain } from './terrain.js';
 import { createForest, gameTrees, toyForest, loadTreeModels, GAME_FOREST } from './trees.js';
@@ -29,10 +32,17 @@ export const MAIN_RUN = '云霄峰道'; // Yunxiaofeng, the run under Gondola No
 // shaped for its landmarks (summit.js) and Cloud Lake for its water (lakes.js).
 // Returns loadWorld()'s world plus `piste` (the runs' field, on the 4 m grid),
 // `ground` (the heightfield all of that made, which everything stands on),
-// `lakes`, `summitFrame` (where the summit is laid out from) and `treeModels`
-// (the forest's baked trees, see loadTreeModels in trees.js).
-export async function loadResort({ original = false, dataset = 'hemu' } = {}) {
-  const [world, treeModels] = await Promise.all([loadWorld({ edits: !original, dataset }), loadTreeModels()]);
+// `lakes`, `summitFrame` (where the summit is laid out from), `treeModels`
+// (the forest's baked trees, see loadTreeModels in trees.js) and
+// `gondolaApproach` (how gondolas 6 and 7 leave their graded stations).
+export async function loadResort({ original = false, dataset = 'hemu', onProgress = () => {} } = {}) {
+  // Completed startup stages, rather than a timer or a byte-download estimate.
+  let progress = 0;
+  const completed = (weight) => { progress += weight; onProgress(progress); };
+  const [world, treeModels] = await Promise.all([
+    loadWorld({ edits: !original, dataset }).then((world) => { completed(2 / 3); return world; }),
+    loadTreeModels().then((models) => { completed(1 / 6); return models; }),
+  ]);
   const { meta } = world;
   if (dataset === 'koktokay') {
     const halls = (meta.editorObjects || []).map((spec) => {
@@ -46,7 +56,17 @@ export async function loadResort({ original = false, dataset = 'hemu' } = {}) {
   const ground = raiseBanks(world.detail, meta.runs, piste, gameClearings(meta.lifts));
   const summitFrame = dataset === 'koktokay' ? null : shapeSummit(ground, meta.lifts);
   const lakes = shapeLakes(ground, meta.lakes);
-  return { ...world, dataset, piste, ground, lakes, summitFrame, treeModels };
+  shapeChairliftStations(ground, meta.lifts);
+  // Gondolas 6 and 7 come into their stations level, on graded ground.
+  const stations = liftStations(meta.lifts), offPiste = offPisteSites(piste, PISTE_HALF_WIDTH);
+  const gondolaApproach = new Map();
+  for (const [i, lift] of meta.lifts.entries()) {
+    if (lift.type !== 'gondola' || !MODERN_GONDOLAS.includes(lift.name)) continue;
+    const [A, B] = stations[i].map(([x, z]) => new THREE.Vector3(x, ground.heightAt(x, z), z));
+    shapeGondolaStations(ground, A, B, offPiste, gondolaApproach);
+  }
+  onProgress(1);
+  return { ...world, dataset, piste, ground, lakes, summitFrame, treeModels, gondolaApproach };
 }
 
 // The point `dist` metres along a line of [x, z] points, and the way it runs
@@ -98,11 +118,11 @@ function overlap(a, b) {
 // it its physics and puts it there, once the model is in.
 export function createResort(resort, { terrain: terrainOpts = {}, forest: forestOpts = {}, toy = null, labels = false } = {}) {
   if (resort.dataset === 'koktokay') return createKoktokay(resort, { terrainOpts, forestOpts });
-  const { ground: hf, piste, meta, lakes, edits, treeModels } = resort;
+  const { ground: hf, piste, meta, lakes, edits, treeModels, gondolaApproach: approach } = resort;
   const group = new THREE.Group();
   const terrain = createDetailTerrain(hf, piste, TREELINE, terrainOpts);
   const lodges = SERVICE_CENTRES.map((c) => createServiceCentre(hf, c, { scale: toy?.lodge }));
-  const lifts = createLifts(hf, meta.lifts, toy ? { scale: toy.lift, stationScale: toy.station, spacing: toy.carSpacing, speed: toy.liftSpeed } : {});
+  const lifts = createLifts(hf, meta.lifts, { piste, approach, ...(toy ? { scale: toy.lift, stationScale: toy.station, spacing: toy.carSpacing, speed: toy.liftSpeed } : {}) });
   const buildings = [...lifts.footprints, ...lodges.map((l) => l.userData.footprint)];
   // At toy sizes, does something with these footprints stand clear of the stations and halls?
   const fits = (boxes) => !toy || !boxes.some((b) => buildings.some((B) => overlap(b, B)));
@@ -122,7 +142,7 @@ export function createResort(resort, { terrain: terrainOpts = {}, forest: forest
   group.add(terrain, ...lodges, forest.group, lifts.group, summit.group, water.group, markers);
   if (onsenFits) group.add(onsen.group);
   if (fits([banner.userData.footprint])) group.add(banner);
-  const obstacles = [...buildings, ...props];
+  const obstacles = [...buildings.filter(b => !b.passable), ...lifts.collisionParts, ...props];
 
   // The vehicles, each where it's parked: the pickup, the snowmobile and the
   // Jetson ONE in front of the East Service Centre (or wherever the map editor
@@ -161,8 +181,8 @@ function createKoktokay(resort, { terrainOpts, forestOpts }) {
   const group = new THREE.Group();
   const terrain = createDetailTerrain(hf, piste, 2420, terrainOpts);
   const lodges = SERVICE_CENTRES.map((c) => createServiceCentre(hf, c, { scale: c.scale || 0.65 }));
-  const lifts = createLifts(hf, meta.lifts);
-  const obstacles = [...lifts.footprints, ...lodges.map((l) => l.userData.footprint)];
+  const lifts = createLifts(hf, meta.lifts, { piste, approach: resort.gondolaApproach });
+  const obstacles = [...lifts.footprints.filter((f) => !f.passable), ...lifts.collisionParts, ...lodges.map((l) => l.userData.footprint)];
   const trees = gameTrees(hf, piste, meta.lifts, edits?.trees, { treeline: 2420, spacing: 18 });
   const forest = createForest(hf, trees, { models: treeModels, ...forestOpts });
   const water = createLakes(lakes), markers = createPisteMarkers(hf, meta.runs);

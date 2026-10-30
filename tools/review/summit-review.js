@@ -59,7 +59,7 @@ sun.position.copy(sun.target.position).addScaledVector(new THREE.Vector3(0.62, 0
 scene.add(sun, sun.target);
 const terrain = createDetailTerrain(hf, piste, TREELINE, { tiles: 9, lodDistance: 1200, nearDistance: 300, corduroy: true });
 const backdrop = createBackdrop(resort.backdrop, hf, TREELINE);
-const lifts = createLifts(hf, meta.lifts);
+const lifts = createLifts(hf, meta.lifts, { piste, approach: resort.gondolaApproach });
 const summit = createSummit(hf, { labels: params.get('numbers') !== '0' });
 const sky = createSky();
 scene.add(terrain, backdrop, lifts.group, summit.group, sky);

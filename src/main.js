@@ -1,9 +1,15 @@
 import './ui-zh.js';
+import { setLoadingProgress, setLoadingArrival, finishLoading } from './loading.js';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { retarget } from './player/rider-model.js';
+import { makeActionLoop } from './player/action-loop.js';
 import { SERVICE_CENTRES, PISTE_HALF_WIDTH, ONSEN } from './world/data.js';
 import { loadResort, createResort, along, MAIN_RUN, TREELINE, startingRun } from './world/resort.js';
 import { createBackdrop } from './world/terrain.js';
 import { gondolaCabin } from './world/props.js';
+import { boardingPath } from './world/chairlift-boarding.js';
+import { crossedChairliftPoint } from './world/chairlift-path.js';
 import { createSky, SKY } from './world/sky.js';
 import { Weather, WEATHERS, SUNRISE, SUNSET } from './world/weather.js';
 import { PUFF_COVER } from './world/onsen.js';
@@ -18,7 +24,6 @@ import { find } from './collection.js';
 import { Npc } from './npc/npc.js';
 import { CAST } from './npc/cast.js';
 import { Dialogue } from './npc/dialogue.js';
-import { THROW } from './player/throw.js';
 import { InkPost } from './render/post.js';
 import { toonUniforms } from './render/toon.js';
 import { Rider } from './player/rider.js';
@@ -68,6 +73,9 @@ function resize() {
   renderer.setSize(w, h, false);
   post.setSize(w, h, pr);
   toonUniforms.uPixelRatio.value = pr;
+  // A phone-sized view keeps only the corduroy right in front of you; further
+  // off, the ribs, sharp as they are, become a field of fine stripes there.
+  toonUniforms.uRibScale.value = Math.min(w, h) < 600 ? 12 : 1;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -77,12 +85,12 @@ resize();
 // ---------- World ----------
 // Sent from the diorama, the loading screen says where to.
 const arrivalNote = takeArrivalNote();
-if (arrivalNote) document.querySelector('#loading > :last-child').textContent = arrivalNote;
+if (arrivalNote) setLoadingArrival(arrivalNote);
 // The game's world (see world/resort.js, which the diorama builds from too):
 // the map editor's saved edits apply unless the URL says ?original.
 const dataset = new URLSearchParams(location.search).get('map') === 'koktokay' ? 'koktokay' : 'hemu';
 const koktokay = dataset === 'koktokay';
-const resort = await loadResort({ original: new URLSearchParams(location.search).has('original'), dataset });
+const resort = await loadResort({ original: new URLSearchParams(location.search).has('original'), dataset, onProgress: (p) => setLoadingProgress(p * 0.75) });
 document.title = koktokay ? '可可托海滑雪' : '禾木滑雪';
 document.querySelector('#title .where').textContent = koktokay ? '可可托海国际滑雪场 · 阿勒泰' : '禾木吉克普林 · 阿勒泰';
 document.getElementById('bigmap-tab').textContent = koktokay ? '地图 · 可可托海' : '地图 · 禾木';
@@ -94,7 +102,8 @@ mapChoice.addEventListener('change', () => {
   for (const key of ['at', 'you']) next.searchParams.delete(key);
   location.href = next.href;
 });
-await document.fonts.load('40px "Patrick Hand SC"').catch(() => {});
+await Promise.all([document.fonts.load('40px "Patrick Hand SC"'), document.fonts.load('20px "Patrick Hand"')]).catch(() => {});
+setLoadingProgress(0.875);
 const { meta, piste, lakes } = resort;
 // The ground everything stands on: the snow banked up beside the runs, the
 // summit and Cloud Lake shaped.
@@ -152,7 +161,7 @@ const rides = lifts.lines.map((l) => {
   const bottom = up ? l.a : l.b, top = up ? l.b : l.a;
   const dir = new THREE.Vector3(top.x - bottom.x, 0, top.z - bottom.z).normalize();
   const label = l.name || (l.type === 'gondola' ? 'Gondola' : 'Chair lift');
-  return { id: l.id, label, bottom, top, dir, cable, acc, length: acc[acc.length - 1] };
+  return { id: l.id, label, bottom, top, dir, cable, acc, length: acc[acc.length - 1], fixedChair: lifts.chairSystems.some(s => s.id === l.id) };
 });
 const BOARD_REACH = 10;
 const boardSpots = rides.map((ride) => ({
@@ -176,7 +185,65 @@ scene.add(trail.mesh, spray.points, powderSpray.points, collar.mesh);
 let sink = 0; // how far the board rides down in the powder (see Powder, below)
 const hud = new Hud(resort, piste, lakes);
 const sound = new Sound();
-const menu = createMenu(sound);
+sound.listen();
+// Coming back to the tab (or back from the diorama, with the page kept) tries
+// to revive the audio the browser suspended while the page was hidden; where
+// that needs a gesture, the next tap or key does it (see Sound.listen).
+document.addEventListener('visibilitychange', () => { if (!document.hidden) sound.resume(); });
+window.addEventListener('pageshow', () => sound.resume());
+const ACTIONS = [
+  ['booty-hip-hop-dance', 'Booty Hip Hop Dance'], ['macarena-dance', 'Macarena Dance'],
+  ['breakdance-freezes', 'Breakdance Freezes'], ['moonwalk', 'Moonwalk'],
+  ['golf-drive', 'Golf Drive'], ['gunplay', 'Gunplay'], ['fireball', 'Fireball'],
+  ['roundhouse-kick', 'Roundhouse Kick'], ['guitar-playing', 'Guitar Playing'],
+  ['kneeling-down', 'Kneeling Down'],
+].map(([id, label]) => ({ id, label }));
+const actionFiles = new Map();
+let specialAction = null, pendingAction = null, actionRequest = 0;
+const actionStatus = document.getElementById('action-status');
+const menu = createMenu(sound, { actions: ACTIONS, playAction: playSpecialAction });
+document.getElementById('action-stop').addEventListener('click', stopSpecialAction);
+async function playSpecialAction(id) {
+  const item = ACTIONS.find((entry) => entry.id === id);
+  if (!item) return;
+  if (specialAction?.id === id || pendingAction === id) { stopSpecialAction(); return; }
+  if (state !== 'ride' || (rider.locomotion !== 'walk' && !(specialAction && rider.locomotion === 'act')) || !rider.model || !phys.grounded || phys.crashed > 0 || rider.throwT !== null) {
+    actionStatus.textContent = 'Switch to on foot and stop before playing an action.';
+    hud.toast('Actions are available on foot');
+    return;
+  }
+  const request = ++actionRequest, model = rider.model;
+  pendingAction = id;
+  actionStatus.textContent = `Loading ${item.label}…`;
+  try {
+    if (!actionFiles.has(id)) actionFiles.set(id, new GLTFLoader().loadAsync(import.meta.env.BASE_URL + `models/motions/special-actions-v01/${id}.glb`).catch((err) => { actionFiles.delete(id); throw err; }));
+    const source = await actionFiles.get(id);
+    if (request !== actionRequest) return;
+    pendingAction = null;
+    if (state !== 'ride' || rider.model !== model || !phys.grounded || phys.crashed > 0 || rider.throwT !== null || (rider.locomotion !== 'walk' && !(specialAction && rider.locomotion === 'act'))) {
+      actionStatus.textContent = specialAction ? `Playing ${ACTIONS.find((entry) => entry.id === specialAction.id).label}` : 'Action stopped.';
+      return;
+    }
+    const clip = makeActionLoop(retarget(source.animations[0], source.scene, model.bindScene));
+    if (!clip.tracks.length || !clip.duration) throw new Error('No usable animation tracks');
+    phys.vel.set(0, 0, 0); phys.yawRate = 0;
+    specialAction = { id, clip, time: 0, model };
+    rider.play(clip, 0);
+    actionStatus.textContent = `Playing ${item.label}`;
+  } catch (error) {
+    console.warn('Action unavailable:', id, error);
+    if (request === actionRequest) { pendingAction = null; actionStatus.textContent = `${item.label} could not be loaded.`; }
+  }
+}
+function stopSpecialAction() {
+  ++actionRequest;
+  if (!specialAction && !pendingAction) return;
+  pendingAction = null;
+  specialAction = null;
+  actionStatus.textContent = 'Action stopped.';
+  if (rider.locomotion === 'act') rider.setLocomotion('walk');
+}
+
 // The GPS: pick a destination on the big map and it routes you there.
 const gps = new Navigator({ hf: detail, runs: meta.runs, rides });
 hud.gps = gps;
@@ -266,6 +333,9 @@ const keys = new Set();
 const isControl = (target) => target instanceof Element
   && !!target.closest('input, select, textarea, button, a, [contenteditable="true"]');
 window.addEventListener('keydown', (e) => {
+  // Cmd+key is the browser's or the OS's (Cmd+F finds, Cmd+M minimises), not
+  // the rider's, as in the diorama; its keyup may never come anyway.
+  if (e.metaKey) return;
   // The big map takes the keys while it's open; Escape or M closes it.
   if (bigMap.isOpen) {
     if ((e.code === 'Escape' || e.code === 'KeyM') && !e.repeat) closeMap();
@@ -285,7 +355,10 @@ function act(code, repeat = false) {
   if ((code === 'Enter' || code === 'Space') && state === 'title') { begin(); return; }
   if ((code === 'Enter' || code === 'Space' || code === 'Escape') && state === 'swoop') { swoop.t = 1; return; }
   if ((code === 'Enter' || code === 'Space' || code === 'Escape') && state === 'arrive') { arrival.t = 1; return; }
-  if (code === 'KeyR' && state === 'ride') startRun();
+  if (!repeat && /^Digit[123]$/.test(code)) { const id = menu.actionForKey(Number(code.slice(-1)) - 1); if (id) playSpecialAction(id); return; }
+  if ((specialAction || pendingAction) && code === 'KeyX' && !repeat) { stopSpecialAction(); return; }
+  if (specialAction) { if (code === 'KeyF' && !repeat) { stopSpecialAction(); toggleLocomotion(); } return; }
+  if (code === 'KeyR' && !repeat && state === 'ride') startRun();
   if (code === 'KeyR' && !repeat && state === 'drive') carHome();
   if (code === 'KeyF' && !repeat && state === 'ride') toggleLocomotion();
   if (code === 'KeyM' && !repeat) openMap();
@@ -303,13 +376,20 @@ function act(code, repeat = false) {
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearDog) petDog();
   else if (code === 'KeyE' && !repeat && state === 'ride' && nearWheel) turnWheel(nearWheel);
   else if (code === 'KeyE' && state === 'ride' && boardable) board(boardable.ride);
-  else if ((code === 'KeyE' || code === 'Space') && state === 'lift' && liftRide.t > 0.5) liftRide.t = liftRide.dur;
+  else if ((code === 'KeyE' || code === 'Space') && state === 'lift' && liftRide.t > 0.5) { if (liftRide.system) { if (!liftRide.waiting) liftRide.system.targetSpeed = 20; } else if (liftRide.gondolaSystem) unload(liftRide.ride); else liftRide.t = liftRide.dur; }
   if ((code === 'Enter' || code === 'Space') && panelNext) { const f = panelNext; panelNext = null; f(); }
 }
 const pressE = () => { sound.start(); act('KeyE'); }; // a tapped prompt
 const pressQ = () => { sound.start(); act('KeyQ'); };
-window.addEventListener('keyup', (e) => keys.delete(e.code));
+window.addEventListener('keyup', (e) => {
+  // macOS drops other keys' keyups while Cmd is down, so letting go of Cmd
+  // lets go of everything; otherwise a W released mid-shortcut rides on alone
+  // (the same fix the diorama's fly keys already have, diorama/main.js).
+  if (e.key === 'Meta') keys.clear();
+  else keys.delete(e.code);
+});
 window.addEventListener('blur', () => keys.clear());
+document.addEventListener('visibilitychange', () => { if (document.hidden) keys.clear(); });
 window.addEventListener('focusin', (e) => { if (isControl(e.target)) keys.clear(); });
 // A tap skips the flight down from the title and the drop out of the cloud, as Space does.
 canvas.addEventListener('pointerdown', () => {
@@ -347,7 +427,7 @@ function readInput() {
   input.walk = input.tuck;
   input.run = shift || t.full; // on foot, the stick pushed all the way out runs
   // Throwing on foot, the feet are busy with the throw.
-  if (rider.throwT !== null && rider.locomotion === 'walk') { input.walk = input.run = false; input.steer = 0; }
+  if (specialAction || (rider.throwT !== null && rider.locomotion === 'walk')) { input.walk = input.run = false; input.steer = 0; input.jump = false; }
   pedals.throttle = input.tuck;
   pedals.reverse = input.brake;
   pedals.steer = input.steer;
@@ -370,7 +450,8 @@ function restoreRide() {
   }
 }
 function toggleLocomotion() {
-  if (!phys.grounded || phys.crashed > 0) return;
+  stopSpecialAction();
+  if (!phys.grounded || phys.crashed > 0 || (rider.throwT !== null && rider.locomotion === 'walk' && rider.throwUsesPitch)) return;
   if (rider.locomotion === 'walk') {
     restoreRide();
     hud.toast(touch.on ? 'On board' : 'On board · W push / tuck');
@@ -507,7 +588,7 @@ window.addEventListener('pagehide', saveWeather);
 // driving or soaking takes the pointer and the mouse swings the camera round
 // you. Remembered between visits.
 const mouseLook = new MouseLook(canvas);
-mouseLook.wanted = () => state === 'ride' || state === 'drive' || state === 'horse' || state === 'soak';
+mouseLook.wanted = () => state === 'ride' || state === 'drive' || state === 'horse' || state === 'soak' || state === 'lift';
 {
   const box = document.getElementById('set-mouselook');
   const set = (on) => { mouseLook.set(on); box.checked = on; };
@@ -595,38 +676,42 @@ gps.restore(gpsFrom()); // a destination set before a reload or a trip to the di
 const MOVES = {
   stick: '<circle cx="26" cy="26" r="22" stroke-dasharray="3 3"/><circle cx="19" cy="22" r="9" fill="#fff" stroke-width="2.4"/>'
     + '<path d="M26 9l-3 3M26 9l3 3M26 43l-3-3M26 43l3-3M9 26l3-3M9 26l3 3M43 26l-3-3M43 26l-3 3"/>',
+  speed: '<path d="M8 34a19 19 0 1 1 36 0M12 34h28M26 30l9-12"/><circle cx="26" cy="30" r="2.5" fill="#f0c24a"/>',
+  home: '<path d="M12 24a15 15 0 1 1 3 12M12 13v11h11"/>',
   ollie: '<circle cx="26" cy="26" r="21" fill="#f0c24a" stroke-width="2.4"/><path d="M15 33h22M26 29V15M20.5 20.5 26 15l5.5 5.5"/>',
   card: '<rect x="4" y="15" width="44" height="22" fill="#fff" stroke-width="2.4"/><path d="M11 26h20M37 21l5 5-5 5"/>',
   map: '<circle cx="26" cy="26" r="21" fill="#fff" stroke-width="2.4"/><path d="M17 37c3-8 6-13 9-20M30 38c-1-7 0-14 4-21" stroke="#4f8fd6"/>'
     + '<path d="M26 15l5 13-5-3-5 3z" fill="#f0c24a"/>',
 };
 const move = (name) => `<svg viewBox="0 0 52 52" aria-hidden="true">${MOVES[name]}</svg>`;
-const introPanel = () => koktokay ? showPanel('可可托海国际滑雪场', `<p>从<b>${mainRun.name}</b>出发，当前海拔 ${Math.round(detail.heightAt(startAt.x, startAt.z))} 米。</p><p>按 W 蹬行或压低重心，A / D 转弯，空格蓄力起跳，F 切换步行，R 返回出发点。靠近索道下站按 E 乘坐缆车，按 M 打开全图。</p><p>地形来自真实高程数据，雪道和索道来自 OSM；大厅和树林的位置为估计。</p>`, startRun, '开始滑行 ▸') : touch.on ? showPanel('Hemu · 禾木', `
-  <p>Top of <b>Gondola No. 6</b>, 2,756 m. The whole mountain is yours, all the way down to the <b>East Service Centre</b>.</p>
-  <div class="keys moves">
-    ${move('stick')}<span><b>Drag</b> anywhere low on the left: sideways to carve, push up to tuck, pull back to skid</span>
-    ${move('ollie')}<span><b>Hold Ollie</b> and let go to jump · spin in the air</span>
-    ${move('card')}<span><b>Tap the card</b> when one pops up: ride a lift, take the pickup, the snowmobile or the Jetson ONE, pet ${DOG.en} the sheepdog</span>
-    ${move('map')}<span><b>Tap the map</b>, top right, for the whole mountain and the GPS</span>
-  </div>
-  <p class="dim">Terrain: real elevation data. Runs and lifts: OpenStreetMap / OpenSkiMap.</p>`, startRun, 'Drop in ▸') : showPanel('Hemu · 禾木', `
-  <p>Top of <b>Gondola No. 6</b>, Hemu Jikepulin, Altay — 2,756 m.
-  The whole mountain is yours: drop into <b>云霄峰道 Yunxiaofeng</b> (${Math.round(runLength)} m) or ride anywhere,
-  all the way down the valley to the <b>East Service Centre</b> (东区服务大厅), 1,300 m below.
-  Board the gondola at its station out front, or any lift at its bottom station, to head back up.</p>
-  <div class="keys">
-    <span><kbd>A</kbd><kbd>D</kbd></span><span>carve heelside / toeside</span>
-    <span><kbd>W</kbd></span><span>tuck for speed · push along on the flat</span>
-    <span><kbd>S</kbd></span><span>skid to scrub speed</span>
-    <span><kbd>Space</kbd></span><span>hold and release to ollie · spin in the air</span>
-    <span><kbd>E</kbd></span><span>board a lift at its station · take the pickup, the snowmobile or the Jetson ONE · ride the horse on the ridge past the ovoo</span>
-    <span><kbd>Space</kbd><kbd>Shift</kbd></span><span>in the Jetson ONE: take off and climb / come down and land</span>
-    <span><kbd>F</kbd></span><span>board / on foot with a walking rider · choose under Rider</span>
-    <span><kbd>E</kbd><kbd>Q</kbd></span><span>pet <b>${DOG.en}</b> the sheepdog, up here with you · throw a snowball for it</span>
-    <span><kbd>W</kbd><kbd>Shift</kbd></span><span>walk / run on foot · A/D turn · S stop</span>
-    <span><kbd>R</kbd></span><span>back to the top</span>
-  </div>
-  <p class="dim">Terrain: real elevation data. Runs and lifts: OpenStreetMap / OpenSkiMap.</p>`, startRun);
+// A compact first-run field guide: keep the essentials visible and the less
+// frequent controls available without covering the mountain with instructions.
+const introTile = (icon, title, instruction) => `<div class="intro-tile">${move(icon)}<div><b>${title}</b><span>${instruction}</span></div></div>`;
+const introPanel = () => showPanel(koktokay ? '可可托海国际滑雪场' : '禾木吉克普林', `
+  <div class="intro-guide">
+    <p class="intro-place">${mainRun.name} · ${Math.round(detail.heightAt(startAt.x, startAt.z))} 米 <span>— 开始探索雪山</span></p>
+    <div class="intro-tiles">
+      ${touch.on ? `
+        ${introTile('stick', '转弯与速度', '拖动左下方转弯，向上加速，向后刹车')}
+        ${introTile('ollie', '跳跃', '按住起跳后松开，在空中转向')}
+        ${introTile('card', '互动', '点击提示卡与附近物体互动')}
+        ${introTile('map', '查看路线', '点击地图查看全图与导航')}
+      ` : `
+        ${introTile('stick', '转弯', '<kbd>A</kbd> <kbd>D</kbd> 向左 / 向右转弯')}
+        ${introTile('speed', '速度', '<kbd>W</kbd> 压低重心 / 蹬行 · <kbd>S</kbd> 侧滑刹车')}
+        ${introTile('ollie', '跳跃', '<kbd>Space</kbd> 按住后松开起跳，在空中旋转')}
+        ${introTile('card', '互动', '<kbd>E</kbd> 与附近物体互动')}
+        ${introTile('map', '地图与导航', '<kbd>M</kbd> 或点击小地图')}
+        ${introTile('home', '返回起点', '<kbd>R</kbd> 返回出发点')}
+      `}
+    </div>
+    ${touch.on ? '' : `<details class="intro-more"><summary>更多操作</summary>
+      <p><kbd>F</kbd> 切换滑行 / 步行（需支持步行的滑手） · <kbd>W</kbd> 步行， <kbd>Shift</kbd> 奔跑， <kbd>A</kbd> / <kbd>D</kbd> 转向， <kbd>S</kbd> 停止</p>
+      <p><kbd>E</kbd> 抚摸牧羊犬 · <kbd>Q</kbd> 投掷雪球</p>
+      <p>Jetson ONE: <kbd>Space</kbd> 起飞 / 爬升 · <kbd>Shift</kbd> 下降 / 着陆</p>
+    </details>`}
+    <p class="intro-credit">地形：真实高程数据 · 雪道与索道：OpenStreetMap / OpenSkiMap</p>
+  </div>`, startRun, '开始滑行 ▸');
 
 // ---------- Camera ----------
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _look = new THREE.Vector3();
@@ -845,7 +930,7 @@ function updateRideCamera(dt) {
 const _q = new THREE.Quaternion(), _m = new THREE.Matrix4();
 const _f = new THREE.Vector3(), _x = new THREE.Vector3(), _up = new THREE.Vector3();
 function poseRider(dt, snap = false) {
-  const walking = rider.locomotion === 'walk';
+  const walking = rider.locomotion === 'walk' || !!specialAction;
   if (walking || !phys.grounded) _up.set(0, 1, 0);
   else _up.copy(phys.normal);
   phys.forward(_f);
@@ -912,19 +997,30 @@ const clock = new THREE.Clock();
 let acc = 0, time = 0;
 const STEP = 1 / 120;
 const _side = new THREE.Vector3(), _tail = new THREE.Vector3(), _sv = new THREE.Vector3();
-document.getElementById('loading').classList.add('done');
 
 function frame() {
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const elapsedFrame = clock.getDelta();
+  const dt = Math.min(elapsedFrame, 0.05);
+  // The rope must cover the same distance at low rendering frame rates. Bound
+  // long tab stalls without changing the game's existing physics time step.
+  const chairDt = Math.min(elapsedFrame, 0.25);
   time += dt;
+  if (specialAction) {
+    if (state !== 'ride' || rider.model !== specialAction.model || rider.locomotion !== 'act') stopSpecialAction();
+    else {
+      specialAction.time = (specialAction.time + dt) % specialAction.clip.duration;
+      rider.play(specialAction.clip, specialAction.time);
+    }
+  }
   readInput();
+  lifts.update(dt, chairDt);
 
-  if (bigMap.isOpen) {
+  if (bigMap.isOpen && state !== 'lift') {
     sound.update(0, 0, false); // the ride holds still under the map
   } else if (state === 'ride') {
     acc += dt;
     while (acc >= STEP) {
-      if (rider.locomotion === 'walk') phys.stepWalk(STEP, input);
+      if (rider.locomotion === 'walk' || specialAction) phys.stepWalk(STEP, input);
       else phys.step(STEP, input);
       acc -= STEP;
     }
@@ -955,7 +1051,7 @@ function frame() {
     // throws up a plume as it goes, more when it turns or skids.
     phys.forward(_f);
     _side.set(-_f.z, 0, _f.x);
-    const onBoard = rider.locomotion !== 'walk' && phys.grounded && phys.crashed <= 0;
+    const onBoard = rider.locomotion !== 'walk' && !specialAction && phys.grounded && phys.crashed <= 0;
     updateSink(dt, onBoard);
     if (onBoard) {
       if (rider.gear === 'ski') trail.add(phys.pos, _side, 0.09, phys.powder > 0.5 ? 0.42 + sink : 0, 0.25);
@@ -980,7 +1076,7 @@ function frame() {
     placeCollar();
     updateRideCamera(dt);
     hud.update(phys, elapsed);
-    sound.update(phys.speed, phys.slip + (input.brake ? 4 : 0), phys.grounded && rider.locomotion !== 'walk');
+    sound.update(phys.speed, phys.slip + (input.brake ? 4 : 0), phys.grounded && rider.locomotion !== 'walk' && !specialAction);
   } else if (state === 'drive') {
     const drive = car.phys;
     acc += dt;
@@ -1022,7 +1118,7 @@ function frame() {
     sound.update(0, 0, false);
   } else if (state === 'lift') {
     const label = `${liftRide.ride.label} ↑`;
-    updateLift(dt); // may step you off at the top
+    updateLift(liftRide.system ? chairDt : dt); // may step you off at the top
     if (timing) elapsed += dt;
     hud.update(phys, elapsed, state === 'lift' ? label : null);
     sound.update(0, 0, false);
@@ -1062,7 +1158,6 @@ function frame() {
   ripples.update(dt, dry);
   spray.update(dt);
   powderSpray.update(dt);
-  lifts.update(dt);
   if (change && time >= change.at) {
     rider.wear(change.outfit);
     change = null;
@@ -1131,7 +1226,7 @@ function touchLayout() {
   } else if (state === 'soak') {
     touch.layout({ layout: 'lift', act: { label: 'Get out', icon: 'out' } });
   } else {
-    touch.layout({ layout: 'lift', stick: false, act: liftRide.t > 0.5 ? { label: 'Skip', icon: 'skip' } : null });
+    touch.layout({ layout: 'lift', stick: false, act: liftRide.t > 0.5 && !liftRide.waiting ? { label: liftRide.system ? 'Faster' : 'Skip', icon: 'skip' } : null });
   }
 }
 
@@ -1215,10 +1310,26 @@ function updateBoarding() {
 let liftRide = null;
 const _c = new THREE.Vector3();
 function board(ride) {
+  const system = lifts.chairSystems.find(s => s.id === ride.id);
+  if (system) { boardChair(ride, system); return; }
+  const gondolaSystem = lifts.gondolaSystems.find(s => s.id === ride.id);
   restoreRide();
   state = 'lift';
   // Sped up: 1–2 km of cable in 10–22 s.
   liftRide = { ride, t: 0, dur: THREE.MathUtils.clamp(ride.length / 110, 10, 22) };
+  if (gondolaSystem) {
+    lifts.update(0);
+    // Bring the next cabin round to the boarding point under the canopy.
+    const { path } = gondolaSystem;
+    const toBoarding = (c) => ((path.boarding - c.distance) % path.total + path.total) % path.total;
+    const car = gondolaSystem.cars.reduce((a, b) => toBoarding(b) < toBoarding(a) ? b : a);
+    gondolaSystem.phase = (gondolaSystem.phase + toBoarding(car)) % path.total;
+    lifts.update(0);
+    gondolaSystem.passenger = car;
+    gondolaSystem.speed = gondolaSystem.targetSpeed = ride.length / liftRide.dur;
+    Object.assign(liftRide, { gondolaSystem, car, previous: car.distance });
+    lifts.update(0);
+  }
   rider.root.visible = false;
   cabin.visible = true;
   cabin.setLine(ride.label);
@@ -1232,12 +1343,20 @@ function board(ride) {
 
 function updateLift(dt) {
   const L = liftRide, { ride } = L;
+  if (L.system) { updateChairRide(dt); return; }
   L.t = Math.min(L.dur, L.t + dt);
-  const u = L.t / L.dur;
-  const s = (u - Math.sin(u * Math.PI * 2) / (Math.PI * 2)) * ride.length; // eased start and stop
-  let i = 1;
-  while (i < ride.acc.length - 1 && ride.acc[i] < s) i++;
-  cabin.position.lerpVectors(ride.cable[i - 1], ride.cable[i], (s - ride.acc[i - 1]) / (ride.acc[i] - ride.acc[i - 1]));
+  if (L.gondolaSystem) {
+    cabin.position.copy(L.car.position);
+    cabin.rotation.y = L.car.yaw;
+    if (crossedChairliftPoint(L.previous, L.car.distance, L.gondolaSystem.path.upLength, L.gondolaSystem.path.total)) { unload(ride); return; }
+    L.previous = L.car.distance;
+  } else {
+    const u = L.t / L.dur;
+    const s = (u - Math.sin(u * Math.PI * 2) / (Math.PI * 2)) * ride.length; // eased start and stop
+    let i = 1;
+    while (i < ride.acc.length - 1 && ride.acc[i] < s) i++;
+    cabin.position.lerpVectors(ride.cable[i - 1], ride.cable[i], (s - ride.acc[i - 1]) / (ride.acc[i] - ride.acc[i - 1]));
+  }
   cabin.rotation.z = Math.sin(L.t * 1.3) * 0.02;
   phys.pos.copy(cabin.position);
   // Camera off the cabin's flank, looking up the line past it.
@@ -1251,11 +1370,147 @@ function updateLift(dt) {
   camera.lookAt(camLook);
   camera.fov = 58 + portrait() * 12;
   camera.updateProjectionMatrix();
-  if (L.t >= L.dur) unload(ride);
+  if (!L.gondolaSystem && L.t >= L.dur) unload(ride);
+}
+
+// Seat coordinates are in Rider's body frame. Both Mixamo riders use the same
+// seated IK, with their own measured hip and leg proportions.
+const chairSeat = {
+  hips: new THREE.Vector3(0, 0, 0),
+  feet: [new THREE.Vector3(0.18, -0.48, 0.48), new THREE.Vector3(-0.18, -0.48, 0.48)],
+  grips: [new THREE.Vector3(0.35, 0.18, 0.22), new THREE.Vector3(-0.35, 0.18, 0.22)],
+  kneeOut: 0.12, fold: 0.05, lift: true, chairAnimation: true,
+};
+function boardChair(ride, system) {
+  lifts.update(0); // Populate grip positions even if boarding before the first frame.
+  const start = phys.pos.clone();
+  const target = system.path.points[0].clone();
+  target.y = detail.heightAt(target.x, target.z);
+  const posts = lifts.collisionParts.filter(o => Math.hypot(o.x - ride.bottom.x, o.z - ride.bottom.z) < 9);
+  const waypoints = boardingPath(start, target, posts);
+  if (!waypoints) { hud.toast('Move clear of the station posts to board', 2000); return; }
+  restoreRide();
+  const walkLength = waypoints.slice(1).reduce((sum, p, i) => sum + Math.hypot(p.x - waypoints[i].x, p.z - waypoints[i].z), 0);
+  const walkTime = Math.max(1, walkLength / 3);
+  state = 'lift';
+  mouseLook.force = true;
+  mouseLook.reset();
+  rider.setLocomotion('walk');
+  // Start sitting just before the grip reaches the outgoing strand, so the
+  // moving cushion picks the rider up instead of passing through their body.
+  const catchAt = system.path.total - 1.2;
+  const chair = system.chairs.map(c => ({ c, wait: ((catchAt - c.distance + system.path.total) % system.path.total) / Math.max(system.speed, 0.1) }))
+    .filter(x => x.wait >= walkTime + 0.5).sort((a, b) => a.wait - b.wait)[0]?.c ?? system.chairs[0];
+  liftRide = { ride, system, chair, catchAt, t: 0, waiting: true, waypoints, walkLength, walkTime, previous: chair.distance };
+  phys.vel.set(0, 0, 0);
+  trail.gap(phys.pos);
+  cabin.visible = false;
+  hud.prompt('Walk to the loading point · wait for your chair', 'Wait for your chair');
+}
+function updateChairRide(dt) {
+  const L = liftRide, { chair, system, ride } = L;
+  L.t += dt;
+  if (L.waiting) {
+    const k = THREE.MathUtils.smootherstep(L.t / L.walkTime, 0, 1);
+    let distance = k * L.walkLength, a = L.waypoints[0], b = L.waypoints.at(-1);
+    for (let i = 1; i < L.waypoints.length; i++) {
+      const next = L.waypoints[i], length = Math.hypot(next.x - a.x, next.z - a.z);
+      b = next;
+      if (distance <= length || i === L.waypoints.length - 1) {
+        const t = length ? Math.min(1, distance / length) : 1;
+        phys.pos.x = THREE.MathUtils.lerp(a.x, b.x, t);
+        phys.pos.z = THREE.MathUtils.lerp(a.z, b.z, t);
+        break;
+      }
+      distance -= length; a = next;
+    }
+    phys.pos.y = detail.heightAt(phys.pos.x, phys.pos.z);
+    const dx = b.x - a.x, dz = b.z - a.z;
+    phys.yaw = yawOf(dx, dz);
+    phys.vel.set(dx, 0, dz).normalize().multiplyScalar(L.t < L.walkTime ? 3 : 0);
+    poseRider(dt);
+    if (crossedChairliftPoint(L.previous, chair.distance, L.catchAt, system.path.total)) {
+      L.waiting = false;
+      phys.vel.set(0, 0, 0);
+      startHop();
+      rider.setLocomotion('sit', chairSeat);
+      hud.prompt('<kbd>Space</kbd> speed up the lift · mouse / arrows look around', 'Speed up the lift ▸', pressE);
+    }
+    L.previous = chair.distance;
+  } else {
+    // The seat offset turns with the chair through the terminal bullwheel.
+    const c = Math.cos(chair.yaw), s = Math.sin(chair.yaw);
+    rider.root.position.copy(chair.position);
+    rider.root.position.x += c * 0.55 + s * 0.08;
+    rider.root.position.z += -s * 0.55 + c * 0.08;
+    rider.root.position.y -= 2.25;
+    rider.root.quaternion.setFromAxisAngle(Y_AXIS, chair.yaw + Math.PI);
+    if (hop) hopping(dt);
+    rider.update(dt, { crouch: 0, air: false, speed: 0, lean: 0, twist: 0 });
+    phys.pos.copy(rider.root.position);
+    if (system.path.upLength - chair.distance < 75) system.targetSpeed = 5;
+    if (chair.distance >= system.path.upLength - 0.8 && chair.distance < system.path.upLength + 10) {
+      unloadChair(ride, chair, system); return;
+    }
+  }
+  if (keys.has('ArrowLeft')) mouseLook.turn(1.15 * dt, 0);
+  if (keys.has('ArrowRight')) mouseLook.turn(-1.15 * dt, 0);
+  _look.copy(L.waiting ? phys.pos : chair.position);
+  _look.y += L.waiting ? 1 : -1.75;
+  _w.copy(_look).addScaledVector(ride.dir, -6).addScaledVector(system.path.side, 3); _w.y += 2;
+  swing(_w, _look, ride.dir, mouseLook.yaw, mouseLook.pitch);
+  _w.y = Math.max(_w.y, detail.heightAt(_w.x, _w.z) + 1.2);
+  // The terminal bullwheel is at rope height. Keep the station camera below
+  // it and the roof, so a close orbit does not put that machinery across the rider.
+  const station = Math.hypot(_look.x - ride.bottom.x, _look.z - ride.bottom.z) < 10 ? ride.bottom
+    : Math.hypot(_look.x - ride.top.x, _look.z - ride.top.z) < 10 ? ride.top : null;
+  if (station) _w.y = Math.min(_w.y, station.y + 2.8);
+  // Shorten the orbit before nearby trunks, posts or other moving chairs can
+  // cross the view. Anticipate the next half second of each chair's travel.
+  for (let u = 0.3; u <= 1; u += 0.08) {
+    _c.lerpVectors(_look, _w, u);
+    const tree = forest.hit(_c.x, _c.z, 0.45);
+    const wall = phys.obstacles.some(o => _c.y < o.top + 0.4 && boxGap(o, _c.x, _c.z) < 0.45);
+    let chairNear = false;
+    for (const other of system.chairs) {
+      if (!L.waiting && other === chair) continue;
+      const p = other.position;
+      if (_c.y < p.y - 3.4 || _c.y > p.y + 0.6) continue;
+      const dx = other.tangent.x * system.speed * 0.5, dz = other.tangent.z * system.speed * 0.5;
+      const length2 = dx * dx + dz * dz;
+      const k = length2 ? THREE.MathUtils.clamp(((_c.x - p.x) * dx + (_c.z - p.z) * dz) / length2, 0, 1) : 0;
+      if (Math.hypot(_c.x - p.x - dx * k, _c.z - p.z - dz * k) < 2.1) { chairNear = true; break; }
+    }
+    if ((tree && _c.y < tree.top + 0.4) || wall || chairNear) { _w.lerpVectors(_look, _w, Math.max(0.22, u - 0.12)); break; }
+  }
+  camera.position.lerp(_w, 1 - Math.exp(-dt * (station ? 9 : 5)));
+  camLook.lerp(_look, 1 - Math.exp(-dt * 8));
+  camera.lookAt(camLook); camera.fov = 58 + portrait() * 12; camera.updateProjectionMatrix();
+}
+function unloadChair(ride, chair, system) {
+  system.targetSpeed = 5;
+  mouseLook.force = false;
+  if (!mouseLook.on && mouseLook.locked) document.exitPointerLock();
+  mouseLook.reset();
+  startHop();
+  rider.setLocomotion('ride');
+  // Step outward from the uphill strand, clear of following chairs and the
+  // terminal posts. The existing hop blends the rider onto the groomed snow.
+  const x = chair.position.x + ride.dir.x * 2 - system.path.side.x * 3.5;
+  const z = chair.position.z + ride.dir.z * 2 - system.path.side.z * 3.5;
+  phys.reset(x, z, yawOf(ride.dir.x, ride.dir.z));
+  camDir.copy(ride.dir);
+  liftRide = null; state = 'ride';
+  hud.prompt(''); hud.toast(`${ride.label} · ${Math.round(ride.top.y).toLocaleString()} m`, 2000);
+  trail.gap(phys.pos); gps.reroute(gpsFrom());
 }
 
 // Step off at the top station onto the best open snow nearby, facing downhill.
 function unload(ride) {
+  if (liftRide?.gondolaSystem) {
+    liftRide.gondolaSystem.passenger = null;
+    liftRide.gondolaSystem.speed = liftRide.gondolaSystem.targetSpeed = 5;
+  }
   restoreRide();
   const P = ride.top;
   const at = topSpot(ride);
@@ -1615,7 +1870,7 @@ function updateWheels(dt) {
 }
 
 // A snowball, thrown overarm the way the camera looks (see throw.js): it
-// leaves the hand at THROW.release, and the dog is off at the wind-up.
+// leaves the hand at the selected animation’s release time; the dog is off at the wind-up.
 const throwDir = new THREE.Vector3();
 const _throw = new THREE.Vector3();
 function throwSnowball() {
@@ -1625,7 +1880,7 @@ function throwSnowball() {
   throwDir.setY(0).normalize();
   if (!rider.startThrow()) return;
   _throw.copy(phys.pos).addScaledVector(throwDir, 0.3).y += 1.5; // about where it'll leave the hand
-  dog.throwBall(_throw, throwDir, THROW.release);
+  dog.throwBall(_throw, throwDir, rider.throwRelease);
 }
 
 // ---------- Driving ----------
@@ -2101,10 +2356,11 @@ function arrive(dest, at = dest) {
   camDir.set(at.dx, 0, at.dz);
   const end = new THREE.Vector3(), look = new THREE.Vector3();
   cameraTarget(end, look);
-  const from = end.clone().addScaledVector(camDir, -260);
-  from.y += 380;
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const from = end.clone();
+  if (!reducedMotion) { from.addScaledVector(camDir, -260); from.y += 380; }
   // A beat in the cloud first while the loading screen fades.
-  arrival = { t: -0.25, dur: 2.8, end, look, from, at };
+  arrival = { t: -0.25, dur: reducedMotion ? 0.65 : 2.8, end, look, from, at };
   setCloud(1);
   updateArrival(0);
 }
@@ -2189,7 +2445,7 @@ function leaveFor(href, note) {
   leaving = { t: 0, href };
 }
 function updateLeaving(dt) {
-  leaving.t = Math.min(1, leaving.t + dt / 0.7);
+  leaving.t = Math.min(1, leaving.t + dt / (matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.45 : 0.7));
   setCloud(THREE.MathUtils.smoothstep(leaving.t, 0, 1));
   if (leaving.t >= 1) {
     closeMap(); // back from the diorama, you ride on
@@ -2241,5 +2497,6 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { npcs, dialogue, phys, rider, camera, mouseLook, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, foxes, horse, mountHorse, getOffHorse, summit, wheels, turnWheel, sound, rides, board, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { npcs, dialogue, phys, rider, camera, mouseLook, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, foxes, horse, mountHorse, getOffHorse, summit, wheels, turnWheel, sound, rides, lifts, board, get liftRide() { return liftRide; }, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+await finishLoading();
 requestAnimationFrame(frame);

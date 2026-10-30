@@ -1,0 +1,72 @@
+/* Both worlds share one paper-and-ink loading vocabulary. */
+#loading.ski-loading {
+  z-index: 9; /* Above the diorama's cloud until the loader has faded. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+}
+#loading .loading-art {
+  width: min(100%, 360px);
+  text-align: center;
+}
+#loading .goggles {
+  position: relative;
+  width: 168px;
+  height: 91px;
+  margin: auto;
+}
+#loading .ink {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  animation: loading-ink 1.2s steps(1, end) infinite;
+}
+#loading .ink svg { display: block; width: 100%; height: 100%; overflow: visible; }
+/* The open mountain silhouette needs a little more width to balance the goggles. */
+#loading .mountain .ink svg { transform: scale(.944); }
+#loading .goggles:not(.mountain) .ink svg { transform: scale(.728); }
+#loading .ink-1 { animation-delay: -.4s; }
+#loading .ink-2 { animation-delay: -.8s; }
+@keyframes loading-ink {
+  0%, 100% { opacity: 1; }
+  33.333% { opacity: 0; }
+}
+#loading .label {
+  margin-top: 16px;
+  color: var(--ink);
+  font: 20px/28px 'Patrick Hand SC', cursive;
+  letter-spacing: 2px;
+}
+#loading .letter {
+  display: inline-block;
+  transform: translateY(var(--y)) rotate(var(--r));
+  transform-origin: 50% 75%;
+  animation: loading-handwriting 2.4s steps(1, end) infinite;
+  animation-delay: var(--d);
+}
+@keyframes loading-handwriting {
+  0%, 27%, 69%, 83%, 100% { transform: translateY(var(--y)) rotate(var(--r)); }
+  19% { transform: translateY(calc(var(--y) + .3px)) rotate(calc(var(--r) + .25deg)); }
+  76% { transform: translateY(calc(var(--y) - .25px)) rotate(calc(var(--r) - .2deg)); }
+}
+#loading .footprints { display: block; width: 168px; height: 39px; margin: 20px auto 0; overflow: visible; }
+#loading .step { opacity: 0; fill: var(--ink); fill-opacity: .045; }
+#loading .step.landed { opacity: .7; }
+#loading .step.current { opacity: .95; }
+#loading .tread { fill: none; stroke-width: .65; opacity: .62; }
+#loading .loading-arrival {
+  margin: 16px auto 0;
+  max-width: 100%;
+  color: var(--ink);
+  font: 16px/1.3 'Patrick Hand', 'Comic Sans MS', cursive;
+  letter-spacing: .4px;
+  overflow-wrap: anywhere;
+}
+#loading .loading-arrival:empty { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  #loading.ski-loading { transition-duration: .01ms; }
+  #loading .letter, #loading .ink { animation: none; }
+  #loading .ink-0 { opacity: 1; }
+}

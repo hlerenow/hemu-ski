@@ -171,8 +171,9 @@ export class RouteGraph {
       const top = this.#node(ride.top.x, ride.top.z, { kind: 'station', ride, end: 'top' });
       this.y[bottom] = ride.bottom.y; this.y[top] = ride.top.y;
       this.stations.set(ride.id, { bottom, top });
-      // The game's ride: 1–2 km of cable in 10–22 s.
-      this.#edge(bottom, top, BOARD_WAIT + Math.min(Math.max(ride.length / 110, 10), 22), 'lift', ride);
+      // Fixed-grip chairs follow the rope at 5 m/s; other rides retain their existing timing.
+      const duration = ride.fixedChair ? ride.length / 5 : Math.min(Math.max(ride.length / 110, 10), 22);
+      this.#edge(bottom, top, BOARD_WAIT + duration, 'lift', ride);
       this.#linkTo(bottom, STATION);
       this.#linkFrom(top, STATION * 1.4);
       this.#linkFrom(bottom, STATION); // changed your mind at the bottom

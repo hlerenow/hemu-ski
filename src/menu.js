@@ -13,7 +13,7 @@ function loadPrefs() {
   return prefs;
 }
 
-export function createMenu(sound) {
+export function createMenu(sound, { actions = [], playAction = () => {} } = {}) {
   const root = document.getElementById('menu');
   const prefs = loadPrefs();
   const save = () => {
@@ -83,5 +83,31 @@ export function createMenu(sound) {
     if ((open || expanded) && !root.contains(e.target)) expand(false);
   });
 
-  return { prefs, save, close: () => expand(false) };
+  // The three slots are local preferences; choosing an action toggles its loop.
+  const list = document.getElementById('action-list');
+  const shortcuts = document.getElementById('action-shortcuts');
+  const valid = new Set(actions.map((item) => item.id));
+  const slots = Array.isArray(prefs.actionSlots) ? prefs.actionSlots.slice(0, 3) : [];
+  while (slots.length < 3) slots.push('');
+  for (let i = 0; i < 3; i++) if (!valid.has(slots[i])) slots[i] = '';
+  prefs.actionSlots = slots;
+  for (const item of actions) {
+    const button = document.createElement('button');
+    button.type = 'button'; button.textContent = item.label;
+    button.addEventListener('click', () => playAction(item.id));
+    list.append(button);
+  }
+  for (let i = 0; i < 3; i++) {
+    const label = document.createElement('label');
+    const key = document.createElement('kbd'); key.textContent = String(i + 1);
+    const select = document.createElement('select');
+    select.setAttribute('aria-label', `Action for key ${i + 1}`);
+    select.add(new Option('Not assigned', ''));
+    for (const item of actions) select.add(new Option(item.label, item.id));
+    select.value = slots[i];
+    select.addEventListener('change', () => { slots[i] = select.value; save(); });
+    label.append(key, select); shortcuts.append(label);
+  }
+
+  return { prefs, save, close: () => expand(false), actionForKey: (index) => slots[index] };
 }
