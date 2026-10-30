@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 
 const SENSITIVITY = 0.0025; // radians a pixel
+const TOUCH_SENSITIVITY = 0.006; // a finger's drag swings further than a mouse's
 const PITCH = { min: -1, max: 1.05 };
 
 export class MouseLook {
@@ -34,6 +35,21 @@ export class MouseLook {
       if (!this.locked && !(dragging && e.buttons)) return;
       this.turn(-e.movementX * SENSITIVITY, e.movementY * SENSITIVITY);
     });
+    // On a touch screen, where the view must look round (riding a chairlift,
+    // with no stick on screen), one finger dragged across it swings the camera.
+    let finger = null;
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' || finger || !this.force || !this.wanted()) return;
+      finger = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== finger?.id) return;
+      this.turn(-(e.clientX - finger.x) * TOUCH_SENSITIVITY, (e.clientY - finger.y) * TOUCH_SENSITIVITY);
+      finger.x = e.clientX; finger.y = e.clientY;
+    });
+    const lift = (e) => { if (e.pointerId === finger?.id) finger = null; };
+    canvas.addEventListener('pointerup', lift);
+    canvas.addEventListener('pointercancel', lift);
   }
 
   get locked() {

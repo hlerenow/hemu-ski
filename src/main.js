@@ -1421,7 +1421,7 @@ function updateChairRide(dt) {
       phys.vel.set(0, 0, 0);
       startHop();
       rider.setLocomotion('sit', chairSeat);
-      hud.prompt('<kbd>Space</kbd> speed up the lift · mouse / arrows look around', 'Speed up the lift ▸', pressE);
+      hud.prompt('<kbd>Space</kbd> speed up the lift · mouse / arrows look around', 'Drag to look around · speed up ▸', pressE);
     }
     L.previous = chair.distance;
   } else {
