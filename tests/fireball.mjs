@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import { Fireball, FIREBALL, crossedCue } from '../src/player/fireball.js';
+
+assert(crossedCue(2, 2.04, FIREBALL.release, 3.75));
+assert(!crossedCue(2.04, 2.1, FIREBALL.release, 3.75));
+assert(crossedCue(3.7, 0.03, 0.02, 3.75));
+const fx = new Fireball();
+const rider = { root: new THREE.Group(), model: { palmAt(side, out) { return out.set(side === 'Left' ? -0.2 : 0.2, 1.2, 0); } } };
+const action = { id: 'fireball', clip: { duration: 3.75 }, previous: 1.4, time: 1.5 };
+assert.deepEqual(fx.update(0.05, action, rider, new THREE.Vector3(0, 0, -1)), ['voice']);
+assert(fx.group.visible);
+assert.equal(fx.group.position.y, 1.2);
+action.previous = 2; action.time = 2.04;
+assert.deepEqual(fx.update(0.04, action, rider, new THREE.Vector3(0, 0, -1)), ['release']);
+assert(fx.group.position.z < 0);
+fx.update(FIREBALL.flight, { ...action, previous: 2.04, time: 2.1 }, rider, new THREE.Vector3(0, 0, -1));
+assert(!fx.group.visible);
+fx.reset();
+console.log('Fireball animation cues, hand attachment, flight and cleanup passed');

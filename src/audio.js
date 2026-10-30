@@ -115,6 +115,42 @@ export class Sound {
     this.sfxOn = on;
     if (this.ctx) this.sfx.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.05);
   }
+  // Preload before the action starts so a network delay cannot move the shout
+  // away from the animation cue. It still uses the normal effects bus.
+  async prepareFireball() {
+    if (!this.ctx) return;
+    if (!this.fireballVoicePromise) this.fireballVoicePromise = fetch(import.meta.env.BASE_URL + 'audio/fireball-v01/hadouken-voice-v02.mp3')
+      .then((response) => { if (!response.ok) throw new Error('Voice unavailable'); return response.arrayBuffer(); })
+      .then((bytes) => this.ctx.decodeAudioData(bytes))
+      .catch((error) => { console.warn('Fireball voice unavailable:', error); this.fireballVoicePromise = null; return null; });
+    this.fireballVoice = await this.fireballVoicePromise;
+  }
+  fireballShout() {
+    if (!this.ctx || !this.fireballVoice) return;
+    this.stopFireballShout();
+    const source = this.ctx.createBufferSource();
+    source.buffer = this.fireballVoice;
+    source.connect(this.sfx);
+    source.onended = () => { if (this.fireballVoiceSource === source) this.fireballVoiceSource = null; };
+    this.fireballVoiceSource = source;
+    source.start();
+  }
+  stopFireballShout() {
+    if (!this.fireballVoiceSource) return;
+    this.fireballVoiceSource.stop();
+    this.fireballVoiceSource = null;
+  }
+  fireballLaunch() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.#puff(t, 0.42, 1300, 0.17, 'bandpass');
+    const tone = this.ctx.createOscillator();
+    tone.type = 'sine';
+    tone.frequency.setValueAtTime(460, t);
+    tone.frequency.exponentialRampToValueAtTime(120, t + 0.3);
+    tone.connect(this.#envelope(t, 0.008, 0.32, 0.12)).connect(this.sfx);
+    tone.start(t); tone.stop(t + 0.34);
+  }
   // How loud the hot spring's spout is, 0…1, by how near you are to it.
   setWater(level) {
     if (!this.ctx) return;

@@ -5,6 +5,7 @@ import { MOBILE } from './render/quality.js';
 import { sceneMemory } from './render/memory.js';
 import { retarget } from './player/rider-model.js';
 import { makeActionLoop } from './player/action-loop.js';
+import { Fireball } from './player/fireball.js';
 import { SERVICE_CENTRES, PISTE_HALF_WIDTH, ONSEN } from './world/data.js';
 import { loadResort, createResort, along, MAIN_RUN, TREELINE } from './world/resort.js';
 import { createBackdrop } from './world/terrain.js';
@@ -174,6 +175,8 @@ let sink = 0; // how far the board rides down in the powder (see Powder, below)
 const hud = new Hud(resort, piste, lakes);
 const sound = new Sound();
 sound.listen();
+const fireball = new Fireball();
+scene.add(fireball.group);
 // Coming back to the tab (or back from the diorama, with the page kept) tries
 // to revive the audio the browser suspended while the page was hidden; where
 // that needs a gesture, the next tap or key does it (see Sound.listen).
@@ -206,6 +209,7 @@ async function playSpecialAction(id) {
   try {
     if (!actionFiles.has(id)) actionFiles.set(id, loadModel(import.meta.env.BASE_URL + `models/motions/special-actions-v01/${id}.glb`).catch((err) => { actionFiles.delete(id); throw err; }));
     const source = await actionFiles.get(id);
+    if (id === 'fireball') { sound.start(); await sound.prepareFireball(); }
     if (request !== actionRequest) return;
     pendingAction = null;
     if (state !== 'ride' || rider.model !== model || !phys.grounded || phys.crashed > 0 || rider.throwT !== null || (rider.locomotion !== 'walk' && !(specialAction && rider.locomotion === 'act'))) {
@@ -215,7 +219,9 @@ async function playSpecialAction(id) {
     const clip = makeActionLoop(retarget(source.animations[0], source.scene, model.bindScene));
     if (!clip.tracks.length || !clip.duration) throw new Error('No usable animation tracks');
     phys.vel.set(0, 0, 0); phys.yawRate = 0;
-    specialAction = { id, clip, time: 0, model };
+    fireball.reset();
+    sound.stopFireballShout();
+    specialAction = { id, clip, time: 0, previous: 0, model };
     rider.play(clip, 0);
     actionStatus.textContent = `Playing ${item.label}`;
   } catch (error) {
@@ -228,6 +234,8 @@ function stopSpecialAction() {
   if (!specialAction && !pendingAction) return;
   pendingAction = null;
   specialAction = null;
+  fireball.reset();
+  sound.stopFireballShout();
   actionStatus.textContent = 'Action stopped.';
   if (rider.locomotion === 'act') rider.setLocomotion('walk');
 }
@@ -995,6 +1003,7 @@ function frame() {
   if (specialAction) {
     if (state !== 'ride' || rider.model !== specialAction.model || rider.locomotion !== 'act') stopSpecialAction();
     else {
+      specialAction.previous = specialAction.time;
       specialAction.time = (specialAction.time + dt) % specialAction.clip.duration;
       rider.play(specialAction.clip, specialAction.time);
     }
@@ -1060,6 +1069,11 @@ function frame() {
       }
     } else if (!phys.grounded) trail.gap(phys.pos);
     poseRider(dt);
+    phys.forward(_f);
+    for (const cue of fireball.update(dt, specialAction, rider, _f)) {
+      if (cue === 'voice') sound.fireballShout();
+      if (cue === 'release') sound.fireballLaunch();
+    }
     placeCollar();
     updateRideCamera(dt);
     hud.update(phys, elapsed);
