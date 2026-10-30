@@ -42,7 +42,7 @@ export class BoardPose {
       tYaw: 0.22 - twist * 0.32, tRoll: -edge * 0.15,
       hPitch: -0.12 - crouch * 0.35 - tuck * 0.2 - grab * 0.6,
       hYaw: 0.55 - twist * 0.16, hRoll: edge * 0.08,
-      kneeOut: 0.12 + carve * 0.1, kneeShift: twist * 0.04,
+      kneeOut: 0.12 + carve * 0.1, kneeShift: twist * 0.04, legExtension: 0.96,
       lPitch: -0.45 - toe * 0.2 - flight * 0.3 - tuck * 0.6,
       lRoll: 0.9 + carve * 0.3 - tuck * 0.75 - flight * 0.15,
       lElbow: -0.45 - tuck * 0.95 - flight * 0.3,
@@ -55,7 +55,8 @@ export class BoardPose {
     const tall = { py: 0.74 + breath, pz: edge < 0 ? 0.015 : -0.015,
       pPitch: edge < 0 ? -0.06 * TOE_ARCH : 0.025, pRoll: 0,
       tPitch: edge < 0 ? -0.16 * TOE_ARCH : 0.04, tYaw: 0.12, tRoll: 0,
-      hPitch: -0.08, kneeOut: 0.1, kneeShift: 0, crouch: 0.14 };
+      hPitch: -0.08, kneeOut: 0.1, kneeShift: 0,
+      legExtension: edge < 0 ? 0.9 : 0.96, crouch: 0.14 };
     for (const [key, target] of Object.entries(tall)) x[key] += (target - x[key]) * deep;
     if (edge > 0) for (const [key, target] of Object.entries({rPitch: -0.85, rRoll: -1.85, rElbow: -1.35})) {
       x[key] += (target - x[key]) * deep;
