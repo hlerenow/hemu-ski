@@ -171,6 +171,7 @@ export { liftStations };
 // boxes, for collisions, with the height of their roofs as `top`).
 export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacing: gap = 1, speed = 5 } = {}) {
   const group = new THREE.Group();
+  let disposed = false, modelData = null;
   const movers = [];
   const belts = [];
   const lines = [];
@@ -202,10 +203,7 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
     const [a, b] = stationsAt[li];
     const A = new THREE.Vector3(a[0], hf.heightAt(a[0], a[1]), a[1]);
     const B = new THREE.Vector3(b[0], hf.heightAt(b[0], b[1]), b[1]);
-    const dir = new THREE.Vector3(B.x - A.x, 0, B.z - A.z);
-    const len = dir.length();
-    dir.normalize();
-    const side = new THREE.Vector3(-dir.z, 0, dir.x);
+    const dir = new THREE.Vector3(B.x - A.x, 0, B.z - A.z).normalize();
     const yaw = Math.atan2(dir.x, dir.z);
     const isGondola = lift.type === 'gondola';
     const cableH = (isGondola ? 13 : 9) * scale;
@@ -230,22 +228,33 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
       footprints.push({ x: P.x, z: P.z, yaw, hw: 7 * stationScale, hd: 9 * stationScale, top: P.y + 12 * stationScale });
     }
 
-    // Towers every ~140 m; the cable runs tower-to-tower at a fixed clearance.
-    const nT = Math.max(2, Math.round(len / 140));
+    // Follow every OSM waypoint, including bends, with towers about 140 m apart.
     const pts = [];
-    for (let i = 0; i <= nT; i++) {
-      const t = i / nT;
-      const x = A.x + (B.x - A.x) * t, z = A.z + (B.z - A.z) * t;
-      const y = hf.heightAt(x, z);
-      pts.push(new THREE.Vector3(x, y + cableH, z));
-      if (i === 0 || i === nT) continue;
-      place(towerMats, x, y - 0.5, z, 0, scale, cableH + 1);
-      place(armMats, x, y + cableH + 0.3, z, yaw + Math.PI / 2, scale);
+    const way = [a, ...lift.points.slice(1, -1), b];
+    for (let seg = 0; seg < way.length - 1; seg++) {
+      const [x0, z0] = way[seg], [x1, z1] = way[seg + 1];
+      const steps = Math.max(1, Math.round(Math.hypot(x1 - x0, z1 - z0) / 140));
+      for (let i = seg ? 1 : 0; i <= steps; i++) {
+        const t = i / steps, x = x0 + (x1 - x0) * t, z = z0 + (z1 - z0) * t;
+        pts.push(new THREE.Vector3(x, hf.heightAt(x, z) + cableH, z));
+      }
+    }
+    const tangents = pts.map((p, i) => {
+      const before = pts[Math.max(0, i - 1)], after = pts[Math.min(pts.length - 1, i + 1)];
+      return new THREE.Vector3(after.x - before.x, 0, after.z - before.z).normalize();
+    });
+    for (let i = 1; i < pts.length - 1; i++) {
+      const p = pts[i], y = p.y - cableH, direction = tangents[i];
+      place(towerMats, p.x, y - 0.5, p.z, 0, scale, cableH + 1);
+      place(armMats, p.x, y + cableH + 0.3, p.z, Math.atan2(direction.x, direction.z) + Math.PI / 2, scale);
     }
     pts[0].y = A.y + 6 * scale;
-    pts[nT].y = B.y + 6 * scale;
+    pts[pts.length - 1].y = B.y + 6 * scale;
 
-    const lanes = [-3 * scale, 3 * scale].map((off) => pts.map((p) => p.clone().addScaledVector(side, off)));
+    const lanes = [-3 * scale, 3 * scale].map((off) => pts.map((p, i) => {
+      const t = tangents[i];
+      return p.clone().add(new THREE.Vector3(-t.z * off, 0, t.x * off));
+    }));
     for (const lane of lanes) {
       group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lane), mats.cable));
     }
@@ -290,6 +299,8 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
 
   // Swap in the Tripo models once they arrive.
   loadLiftModels().then((md) => {
+    if (disposed) return;
+    modelData = md;
     for (const [kind, im] of Object.entries(fleets)) {
       im.geometry = kind === 'chair' ? md.chair : md.cabin;
       im.material = kind === 'chair' ? md.chairMat : md.cabinMats[kind];
@@ -309,7 +320,16 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
     group,
     lines,
     footprints,
+    dispose() {
+      disposed = true;
+      const shared = new Set([...carGeos.values(), modelData?.cabin, modelData?.chair, modelData?.station]);
+      group.traverse((o) => { if (o.geometry && !shared.has(o.geometry)) o.geometry.dispose(); });
+      for (const { mesh, tex } of belts) { mesh.material.dispose(); tex.dispose(); }
+      for (const mat of new Set(badges.map((b) => b.material))) { mat.map?.dispose(); mat.dispose(); }
+      group.clear();
+    },
     update(dt) {
+      if (disposed) return;
       for (const b of belts) b.tex.offset.y = (b.tex.offset.y - dt * b.rate) % 1;
       for (const m of movers) {
         const total = m.acc[m.acc.length - 1];
@@ -320,7 +340,8 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
         const t = (d - m.acc[i - 1]) / (m.acc[i] - m.acc[i - 1]);
         tmp.lerpVectors(m.lane[i - 1], m.lane[i], t);
         _o.position.copy(tmp);
-        _o.rotation.set(0, m.yaw + (m.up ? 0 : Math.PI), Math.sin(m.s * 0.3) * 0.03);
+        const dx = m.lane[i].x - m.lane[i - 1].x, dz = m.lane[i].z - m.lane[i - 1].z;
+        _o.rotation.set(0, Math.atan2(dx, dz) + (m.up ? 0 : Math.PI), Math.sin(m.s * 0.3) * 0.03);
         _o.scale.setScalar(scale);
         _o.updateMatrix();
         m.mesh.setMatrixAt(m.index, _o.matrix);
@@ -546,6 +567,12 @@ export function createServiceCentre(hf, { x, z, faceTo, roof, zh, en, ele }, { s
   g.add(board);
   // The plinth's outline, for collisions, and the roof's top.
   g.userData.footprint = { x, z, yaw, hw: W * 0.625 * scale, hd: D * 0.75 * scale, top: hi + (H + 10) * scale };
+  g.userData.dispose = () => {
+    g.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+    roofMat.dispose();
+    board.material.map.dispose();
+    board.material.dispose();
+  };
   return g;
 }
 

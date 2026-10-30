@@ -31,14 +31,22 @@ export const MAIN_RUN = '云霄峰道'; // Yunxiaofeng, the run under Gondola No
 // `ground` (the heightfield all of that made, which everything stands on),
 // `lakes`, `summitFrame` (where the summit is laid out from) and `treeModels`
 // (the forest's baked trees, see loadTreeModels in trees.js).
-export async function loadResort({ original = false } = {}) {
-  const [world, treeModels] = await Promise.all([loadWorld({ edits: !original }), loadTreeModels()]);
+export async function loadResort({ original = false, dataset = 'hemu' } = {}) {
+  const [world, treeModels] = await Promise.all([loadWorld({ edits: !original, dataset }), loadTreeModels()]);
   const { meta } = world;
+  if (dataset === 'koktokay') {
+    const halls = (meta.editorObjects || []).map((spec) => {
+      const pose = world.edits?.places?.[spec.id] || spec;
+      return { ...spec, ...pose, id: spec.id, zh: spec.name, en: '', ele: Math.round(world.detail.heightAt(pose.x, pose.z)), roof: '#658493',
+        faceTo: [pose.x + Math.sin(pose.yaw) * 100, pose.z + Math.cos(pose.yaw) * 100] };
+    });
+    SERVICE_CENTRES.splice(0, SERVICE_CENTRES.length, ...halls);
+  }
   const piste = new PisteField(meta.runs, world.detail.size, 4, 60, world.detail.center);
   const ground = raiseBanks(world.detail, meta.runs, piste, gameClearings(meta.lifts));
-  const summitFrame = shapeSummit(ground, meta.lifts);
+  const summitFrame = dataset === 'koktokay' ? null : shapeSummit(ground, meta.lifts);
   const lakes = shapeLakes(ground, meta.lakes);
-  return { ...world, piste, ground, lakes, summitFrame, treeModels };
+  return { ...world, dataset, piste, ground, lakes, summitFrame, treeModels };
 }
 
 // The point `dist` metres along a line of [x, z] points, and the way it runs
@@ -89,6 +97,7 @@ function overlap(a, b) {
 // its model, still loading, and `park` (where it's parked); parkVehicle() gives
 // it its physics and puts it there, once the model is in.
 export function createResort(resort, { terrain: terrainOpts = {}, forest: forestOpts = {}, toy = null, labels = false } = {}) {
+  if (resort.dataset === 'koktokay') return createKoktokay(resort, { terrainOpts, forestOpts });
   const { ground: hf, piste, meta, lakes, edits, treeModels } = resort;
   const group = new THREE.Group();
   const terrain = createDetailTerrain(hf, piste, TREELINE, terrainOpts);
@@ -144,4 +153,30 @@ export function createResort(resort, { terrain: terrainOpts = {}, forest: forest
   };
 
   return { group, terrain, lodges, lifts, forest, onsen, summit, banner, water, markers, vehicles, obstacles, parkVehicle, fits };
+}
+
+// Koktokay shares the riding engine, using only this dataset's landmarks.
+function createKoktokay(resort, { terrainOpts, forestOpts }) {
+  const { ground: hf, piste, meta, lakes, edits, treeModels } = resort;
+  const group = new THREE.Group();
+  const terrain = createDetailTerrain(hf, piste, 2420, terrainOpts);
+  const lodges = SERVICE_CENTRES.map((c) => createServiceCentre(hf, c, { scale: c.scale || 0.65 }));
+  const lifts = createLifts(hf, meta.lifts);
+  const obstacles = [...lifts.footprints, ...lodges.map((l) => l.userData.footprint)];
+  const trees = gameTrees(hf, piste, meta.lifts, edits?.trees, { treeline: 2420, spacing: 18 });
+  const forest = createForest(hf, trees, { models: treeModels, ...forestOpts });
+  const water = createLakes(lakes), markers = createPisteMarkers(hf, meta.runs);
+  group.add(terrain, ...lodges, lifts.group, forest.group, water.group, markers);
+  const summit = { group: new THREE.Group(), byId: new Map(), footprints: [] };
+  const onsen = { update() {}, near: () => false };
+  return { group, terrain, lodges, lifts, forest, water, markers, obstacles, summit, onsen, vehicles: [] };
+}
+
+export function startingRun(resort) {
+  const runs = resort.meta.runs;
+  const run = runs.find((r) => r.name === (resort.dataset === 'koktokay' ? '宝石大道' : MAIN_RUN)) || runs[0];
+  if (!run) throw new Error('地图没有可用的雪道');
+  const points = resort.ground.heightAt(...run.points[0]) < resort.ground.heightAt(...run.points.at(-1))
+    ? [...run.points].reverse() : run.points;
+  return { ...run, points };
 }

@@ -206,12 +206,12 @@ function parseWays(els, [cx, cz] = [0, 0]) {
   return { runs, lifts, lakes };
 }
 
-function parsePlaces(els, [cx, cz]) {
+function parsePlaces(els) {
   return els.filter((e) => e.type === 'node' && (e.tags?.aerialway === 'station' || e.tags?.name === '可可托海国际滑雪场'))
     .map((e) => {
       const [x, z] = lonLatToLocal(e.lon, e.lat);
       return { id: e.id, name: e.tags.name || null, type: e.tags.aerialway || e.tags.tourism,
-        x: round1(x - cx), z: round1(z - cz) };
+        x: round1(x), z: round1(z) };
     });
 }
 
@@ -231,7 +231,9 @@ async function main() {
 
   console.log('Pistes, lifts + lakes…');
   const { runs, lifts, lakes } = parseWays(await overpass(DETAIL, RESORT === 'koktokay' ? 'osm-koktokay-v3.json' : 'osm-game.json'));
-  const places = RESORT === 'koktokay' ? parsePlaces(await overpass(DETAIL, 'osm-koktokay-places-v2.json', 'places'), DETAIL.center) : [];
+  // OSM ways and the heightfield both use coordinates relative to ORIGIN.
+  // Do not subtract the heightfield's shifted sampling centre from POIs.
+  const places = RESORT === 'koktokay' ? parsePlaces(await overpass(DETAIL, 'osm-koktokay-places-v2.json', 'places')) : [];
 
   const meta = {
     source: {
@@ -246,7 +248,13 @@ async function main() {
     runs,
     lifts,
     lakes,
-    ...(RESORT === 'koktokay' ? { places } : {}),
+    ...(RESORT === 'koktokay' ? {
+      places,
+      // Approximate building placement beside the OSM resort entrance node.
+      // No surveyed building footprint is present in the imported OSM data.
+      editorObjects: [{ id: 'koktokay:ski-hall', name: '滑雪大厅', en: 'Ski Hall',
+        x: 0, z: 95, yaw: Math.PI, scale: 0.65, source: 'estimated near OSM resort node 9406749601' }],
+    } : {}),
   };
   await fs.writeFile(path.join(OUT, 'world.json'), JSON.stringify(meta));
   console.log(`Done. detail ${d.min.toFixed(0)}–${d.max.toFixed(0)} m, backdrop ${b.min.toFixed(0)}–${b.max.toFixed(0)} m, ${runs.length} runs, ${lifts.length} lifts, ${lakes.length} lakes`);

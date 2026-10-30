@@ -296,8 +296,8 @@ function tree(id, x, z, s, sp) {
 
 // The game's trees: GAME_FOREST's spots with the map editor's `edits` (see
 // applyTreeEdits), which can change its density too.
-export function gameTrees(hf, piste, lifts, edits = null) {
-  const spots = forestSpots(hf, piste, lifts, { ...GAME_FOREST, density: edits?.density ?? GAME_FOREST.density });
+export function gameTrees(hf, piste, lifts, edits = null, options = {}) {
+  const spots = forestSpots(hf, piste, lifts, { ...GAME_FOREST, ...options, density: edits?.density ?? GAME_FOREST.density });
   return applyTreeEdits(spots, hf, edits).trees;
 }
 

@@ -559,3 +559,6 @@ body.touch #bigmap .zoom { gap: 8px; }
 body.touch #bigmap .zoom button { width: 44px; height: 44px; }
 body.touch #bigmap .acts button { min-height: 48px; }
 body.touch #bigmap .dest .clear { min-height: 36px; }
+
+.game-map-choice { position: fixed; z-index: 60; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 2px solid var(--ink); background: var(--paper); color: var(--ink); font-size: 15px; }
+.game-map-choice select { min-width: 0; font: inherit; background: #fff; color: inherit; border: 1px solid var(--ink); padding: 3px; }

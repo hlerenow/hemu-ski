@@ -10,6 +10,7 @@ import { loadWorld, PisteField, PISTE_HALF_WIDTH, applyPlaces, placeOf } from '.
 import { createBackdrop } from '../../src/world/terrain.js';
 import { SKY } from '../../src/world/sky.js';
 import { GAME_FOREST } from '../../src/world/trees.js';
+import { createLifts, createServiceCentre } from '../../src/world/props.js';
 import { EditMap } from './map.js';
 import { TerrainView } from './terrain-view.js';
 import { RunsView, DIFF_COLORS } from './runs-view.js';
@@ -42,9 +43,9 @@ $('dataset').addEventListener('change', (e) => {
   location.href = next.href;
 });
 if (koktokay) {
-  $('play').hidden = true;
+  $('play').hidden = false;
   document.title = 'Koktokay Map Editor';
-  document.querySelector('[data-panel="objects"] .hint').textContent = 'Select a lift station to inspect or move it. OpenStreetMap station and resort markers are read-only; the lists below show every mapped lift and marker.';
+  document.querySelector('[data-panel="objects"] .hint').textContent = 'Drag the estimated ski hall or a lift station to move it. Turn the hall with the round handle. OpenStreetMap station and resort markers are read-only.';
 }
 const world = await loadWorld({ edits: !urlParams.has('original'), dataset });
 if (koktokay) {
@@ -62,8 +63,42 @@ const treesView = new TreesView(hf, map, world.meta.lifts, koktokay ? {
   forestOptions: { treeline: 2420, spacing: 18, density: 0.25, clearings: [] }, pisteCell: 8,
 } : {});
 scene.add(treesView.group);
-const objectsView = new ObjectsView(hf, map, { includePlaces: !koktokay, pois: world.meta.places || [] });
+const customPlaces = koktokay ? world.meta.editorObjects || [] : [];
+const objectsView = new ObjectsView(hf, map, { includePlaces: !koktokay, pois: world.meta.places || [], customPlaces });
 scene.add(objectsView.group);
+
+// The editor shows the same 3D lift and lodge geometry as the game. The
+// building is a visual estimate; its saved pose can be adjusted in Objects.
+let liftProps = null, hallProps = [];
+const objectPose = (id) => map.places[id] || customPlaces.find((o) => o.id === id) || placeOf(id);
+function refreshHall() {
+  for (const hall of hallProps) { hall.removeFromParent(); hall.userData.dispose?.(); }
+  hallProps = customPlaces.map((spec) => {
+    const { x, z, yaw } = objectPose(spec.id);
+    const hall = createServiceCentre(hf, {
+      x, z, faceTo: [x + Math.sin(yaw) * 100, z + Math.cos(yaw) * 100],
+      roof: '#658493', zh: spec.name, en: spec.en, ele: Math.round(hf.heightAt(x, z)),
+    }, { scale: spec.scale });
+    scene.add(hall);
+    return hall;
+  });
+}
+function refreshLifts() {
+  liftProps?.group.removeFromParent();
+  liftProps?.dispose();
+  if (!koktokay) return;
+  liftProps = createLifts(hf, map.lifts, { spacing: 4 });
+  scene.add(liftProps.group);
+  liftProps.update(0);
+}
+if (koktokay) { refreshHall(); refreshLifts(); }
+function syncHallPose(id) {
+  const i = customPlaces.findIndex((o) => o.id === id);
+  if (i < 0) return;
+  const { x, z, yaw } = objectPose(id);
+  hallProps[i].position.set(x, hf.heightAt(x, z), z);
+  hallProps[i].rotation.y = yaw;
+}
 
 // ---------- Camera ----------
 const controls = new OrbitControls(camera, canvas);
@@ -91,7 +126,7 @@ function frameSelection() {
   else if (tool === 'objects') {
     const it = objectsView.selectedItem;
     if (it?.kind === 'station') pts = [0, 1].map((end) => { const e = objectsView.get(`lift:${it.li}:${end}`); return [e.x, e.z]; });
-    else if (it) pts = [[it.x - it.hd, it.z - it.hd], [it.x + it.hd, it.z + it.hd]];
+    else if (it) pts = [[it.x - it.hw, it.z - it.hd], [it.x + it.hw, it.z + it.hd]];
   } else if (tool === 'trees') for (const id of treesView.selection) { const t = treesView.get(id); pts.push([t.x, t.z]); }
   else for (const t of selection) { const r = map.tileVerts(t); pts.push([hf.x0 + r.i0 * hf.step, hf.z0 + r.j0 * hf.step], [hf.x0 + r.i1 * hf.step, hf.z0 + r.j1 * hf.step]); }
   if (!pts.length) return fitMap();
@@ -219,7 +254,7 @@ function updatePanels() {
   if (it?.kind === 'place') {
     const zh = objectsView.zh(it.id);
     moved = !!map.places[it.id];
-    $('obj-info').innerHTML = `<span class="badge" style="background:${it.color}"></span>${htmlText(objectsView.label(it.id))}${zh ? ` · ${htmlText(zh)}` : ''}<br><span class="dim">x ${Math.round(it.x)} · z ${Math.round(it.z)} · ${Math.round(hf.heightAt(it.x, it.z)).toLocaleString()} m · faces ${bearingName(it.yaw)}${moved ? ' · <b>moved</b>' : ''}</span>`;
+    $('obj-info').innerHTML = `<span class="badge" style="background:${it.color}"></span>${htmlText(objectsView.label(it.id))}${zh ? ` · ${htmlText(zh)}` : ''}${it.estimated ? ' · 位置/尺寸估计' : ''}<br><span class="dim">x ${Math.round(it.x)} · z ${Math.round(it.z)} · ${Math.round(hf.heightAt(it.x, it.z)).toLocaleString()} m · faces ${bearingName(it.yaw)}${moved ? ' · <b>moved</b>' : ''}</span>`;
     $('p-facing').value = Math.round(bearingOf(it.yaw)) % 360;
   } else if (it?.kind === 'poi') {
     $('obj-info').textContent = `${it.name} · ${it.poiType} · ${Math.round(hf.heightAt(it.x, it.z)).toLocaleString()} m (OpenStreetMap)`;
@@ -265,12 +300,16 @@ map.onChange((c) => {
   if (c.objects) {
     objectsView.rebuild();
     runsView.rebuildLifts();
+    if (koktokay) { refreshHall(); refreshLifts(); }
     // The forest keeps clear of the lifts and around the halls and the pool:
     // re-plant where one of those was and where it went.
     const now = clearedAreas();
     for (const [k, area] of now) if (String(cleared.get(k)) !== String(area)) { treesView.invalidate(cleared.get(k)); treesView.invalidate(area); }
     cleared = now;
-  } else if (c.heights) objectsView.rebuild();
+  } else if (c.heights) {
+    objectsView.rebuild();
+    if (koktokay) { refreshHall(); refreshLifts(); }
+  }
   if (c.heights || c.holes || c.run !== undefined || c.trees || c.objects) treesView.refresh();
   if (c.run !== undefined) { widthsStale = true; if (widthsOn) setWidths(true); }
   if (c.label) say(c.label);
@@ -346,7 +385,7 @@ function act(name) {
 function turnBy(deg) {
   const it = objectsView.selectedItem;
   if (it?.kind !== 'place') return;
-  const { x, z, yaw } = placeOf(it.id);
+  const { x, z, yaw } = objectPose(it.id);
   map.editObjects(`Turn ${objectsView.label(it.id)}`, (m) => (m.places[it.id] = { x, z, yaw: yaw - THREE.MathUtils.degToRad(deg) }));
 }
 function putBack() {
@@ -360,7 +399,7 @@ function putBack() {
 $('p-facing').addEventListener('change', () => {
   const it = objectsView.selectedItem;
   if (it?.kind !== 'place') return;
-  const { x, z } = placeOf(it.id);
+  const { x, z } = objectPose(it.id);
   map.editObjects(`Turn ${objectsView.label(it.id)}`, (m) => (m.places[it.id] = { x, z, yaw: yawOf(+$('p-facing').value || 0) }));
 });
 document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => act(b.dataset.act)));
@@ -387,7 +426,7 @@ $('play').addEventListener('click', async () => {
   const tab = window.open('', '_blank');
   try {
     if (map.dirty) await save();
-    if (tab) tab.location.href = '/';
+    if (tab) tab.location.href = dataset === 'koktokay' ? '/?map=koktokay' : '/';
   } catch {
     tab?.close();
   }
@@ -532,6 +571,7 @@ function moveObject(d, p) {
   } else map.places[d.id] = { ...d.start, x: d.start.x + dx, z: d.start.z + dz };
   applyPlaces(map.places);
   objectsView.rebuild();
+  if (koktokay && !d.ends) syncHallPose(d.id);
   updatePanels();
 }
 // Turned by however far round its middle the pointer has gone since it grabbed the handle.
@@ -542,6 +582,7 @@ function turnObject(d, p, snap) {
   map.places[d.id] = { ...d.start, yaw };
   applyPlaces(map.places);
   objectsView.rebuild();
+  if (koktokay) syncHallPose(d.id);
   updatePanels();
 }
 // Every lift end at exactly this point: where one lift's top is the next one's bottom.
@@ -595,7 +636,7 @@ canvas.addEventListener('pointerdown', (e) => {
     if (objectsView.pickHandle(mouse, camera, W, H)) {
       const id = objectsView.selected;
       if (!p) return;
-      drag = { kind: 'turn', id, start: placeOf(id), from: { x: p.x, z: p.z }, before };
+      drag = { kind: 'turn', id, start: objectPose(id), from: { x: p.x, z: p.z }, before };
       canvas.setPointerCapture(e.pointerId);
       return;
     }
@@ -610,7 +651,7 @@ canvas.addEventListener('pointerdown', (e) => {
       const lift = map.lifts[it.li], k = it.end ? lift.points.length - 1 : 0;
       // Joined stations move together, unless Alt pulls this one away.
       drag.ends = e.altKey ? [{ lift, k, at: [...lift.points[k]] }] : endsAt(lift.points[k]);
-    } else drag.start = placeOf(id);
+    } else drag.start = objectPose(id);
     canvas.setPointerCapture(e.pointerId);
   }
 });
@@ -790,6 +831,17 @@ function renderFeatureLists() {
   }
   const poiRoot = $('poi-list');
   poiRoot.replaceChildren();
+  customPlaces.forEach((spec) => {
+    const button = document.createElement('button');
+    const small = document.createElement('small');
+    button.textContent = `${spec.name} · ${spec.en}`;
+    small.textContent = '位置/尺寸估计 · 可拖动与旋转';
+    button.append(small);
+    button.addEventListener('click', () => {
+      setTool('objects'); objectsView.setSelected(spec.id); updatePanels(); frameSelection();
+    });
+    poiRoot.append(button);
+  });
   (world.meta.places || []).forEach((poi) => {
     const button = document.createElement('button');
     const small = document.createElement('small');
@@ -856,6 +908,7 @@ setTool('tiles');
 $('loading').classList.add('done');
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
+  liftProps?.update(dt);
   keyPan(dt);
   controls.update(dt);
   // Near plane follows the zoom, so close-ups don't clip and far views keep depth precision.
@@ -878,4 +931,4 @@ function placeLabel() {
 }
 
 // For poking at from the console.
-window.__editor = { map, terrain, runsView, treesView, objectsView, camera, controls, selection, setTool, setWidths };
+window.__editor = { map, terrain, runsView, treesView, objectsView, get liftProps() { return liftProps; }, get hallProps() { return hallProps; }, camera, controls, selection, setTool, setWidths };

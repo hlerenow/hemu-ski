@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SERVICE_CENTRES, PISTE_HALF_WIDTH, ONSEN } from './world/data.js';
-import { loadResort, createResort, along, MAIN_RUN, TREELINE } from './world/resort.js';
+import { loadResort, createResort, along, MAIN_RUN, TREELINE, startingRun } from './world/resort.js';
 import { createBackdrop } from './world/terrain.js';
 import { gondolaCabin } from './world/props.js';
 import { createSky, SKY } from './world/sky.js';
@@ -79,13 +79,26 @@ const arrivalNote = takeArrivalNote();
 if (arrivalNote) document.querySelector('#loading > :last-child').textContent = arrivalNote;
 // The game's world (see world/resort.js, which the diorama builds from too):
 // the map editor's saved edits apply unless the URL says ?original.
-const resort = await loadResort({ original: new URLSearchParams(location.search).has('original') });
+const dataset = new URLSearchParams(location.search).get('map') === 'koktokay' ? 'koktokay' : 'hemu';
+const koktokay = dataset === 'koktokay';
+const resort = await loadResort({ original: new URLSearchParams(location.search).has('original'), dataset });
+document.title = koktokay ? '可可托海滑雪' : '禾木滑雪';
+document.querySelector('#title .where').textContent = koktokay ? '可可托海国际滑雪场 · 阿勒泰' : '禾木吉克普林 · 阿勒泰';
+document.getElementById('bigmap-tab').textContent = koktokay ? '地图 · 可可托海' : '地图 · 禾木';
+const mapChoice = document.getElementById('game-map');
+mapChoice.value = dataset;
+mapChoice.addEventListener('change', () => {
+  const next = new URL(location.href);
+  next.searchParams.set('map', mapChoice.value);
+  for (const key of ['at', 'you']) next.searchParams.delete(key);
+  location.href = next.href;
+});
 await document.fonts.load('40px "Patrick Hand SC"').catch(() => {});
 const { meta, piste, lakes } = resort;
 // The ground everything stands on: the snow banked up beside the runs, the
 // summit and Cloud Lake shaped.
 const detail = resort.ground;
-const mainRun = meta.runs.find((r) => r.name === MAIN_RUN);
+const mainRun = startingRun(resort);
 
 // The ride area runs from the summit down the valley to both service centres:
 // the terrain, the service centres, the forest, the lifts, the hot spring
@@ -98,13 +111,14 @@ const scenery = createResort(resort, {
 });
 const { terrain, lodges, forest, lifts, onsen, summit, water } = scenery;
 scene.add(scenery.group);
-const backdrop = createBackdrop(resort.backdrop, detail);
+const backdrop = createBackdrop(resort.backdrop, detail, koktokay ? { clipDetail: true } : undefined);
 scene.add(backdrop);
 // The rings that spread on the water from the boat's oars.
 const ripples = new Ripples();
 scene.add(ripples.group);
-const cabinRoom = cabinSpace(summit.byId.get('summit:object-7')); // the coffee cabin's room, for the dog's home and the camera
-const yurtRoom = yurtSpace(summit.byId.get('summit:object-1')); // the yurt's, for the camera and Eric's seat
+const hallHome = SERVICE_CENTRES[0];
+const cabinRoom = koktokay ? { home: { x: hallHome.x + 55, z: hallHome.z, yaw: 0, roam: 8, inside: () => false }, room: () => 0, inside: () => false } : cabinSpace(summit.byId.get('summit:object-7')); // the coffee cabin's room, for the dog's home and the camera
+const yurtRoom = koktokay ? { room: () => 0, inside: () => false } : yurtSpace(summit.byId.get('summit:object-1')); // the yurt's, for the camera and Eric's seat
 // The rooms you can walk into, by the landmark they're in: the camera comes in
 // close inside them, and the cast sit in them (see NPCs).
 const rooms = new Map([['summit:object-7', cabinRoom], ['summit:object-1', yurtRoom]]);
@@ -181,7 +195,7 @@ scene.add(marks.group);
 // On Cloud Lake there's a rowing boat, drawn up at the shore nearest a run (see
 // Rowing): the rider sits facing its stern, hands on the oars.
 // The resort parks them (see world/resort.js); this is how each one plays.
-const eastHall = SERVICE_CENTRES.find((c) => c.id === 'east');
+const eastHall = SERVICE_CENTRES.find((c) => c.id === 'east') || SERVICE_CENTRES[0];
 // `cam`: the chase camera's distance back, height and look-ahead, the height it
 // looks at, how far round to the side it hangs at a crawl (radians, + to the
 // right) and how quickly it follows (6 if it doesn't say: the faster the
@@ -693,6 +707,7 @@ const letters = createTitleLetters();
 const specks = createSnowSpecks();
 const setCloud = createCloudWipe(document.getElementById('cloud'));
 const titleEl = document.getElementById('title');
+if (koktokay) letters.group.visible = false;
 scene.add(island, camera);
 camera.add(letters.group, specks.points);
 const pointer = new THREE.Vector2();
@@ -1523,7 +1538,7 @@ function updateHorseCamera(dt) {
 // (on foot or on the board), they look up at you and start talking. Leaving
 // cuts them off; coming back in starts them again.
 const dialogue = new Dialogue(document.getElementById('hud'));
-const npcs = CAST.map((spec) => {
+const npcs = (koktokay ? [] : CAST).map((spec) => {
   const room = rooms.get(spec.home), { seat } = room;
   const npc = new Npc(spec, { cushion: seat.cushion });
   npc.root.position.set(seat.x, seat.y, seat.z);
@@ -1556,7 +1571,7 @@ function updateNpcs(dt) {
 // reaches out and brushes each wheel it passes, setting it turning as fast as
 // you go by; standing beside one, E gives it a push, the hand sweeping across
 // its face the way it turns. While they turn, the mantra is heard.
-const wheels = new PrayerWheels(SUMMIT.objects.filter((o) => o.kind === 'prayerWheels').map((o) => summit.byId.get(o.id)));
+const wheels = new PrayerWheels((koktokay ? [] : SUMMIT.objects).filter((o) => o.kind === 'prayerWheels').map((o) => summit.byId.get(o.id)));
 const TURN = 0.9; // s a push with E takes
 let turnT = 0, turning = null, pushed = false; // the push: s left of it, the wheel, and whether it's been given
 let wheelsT = -1e9; // when they were last named
@@ -2150,8 +2165,9 @@ function closeMap() {
 // on you. Either way the diorama puts its "You" pin where you are.
 const dioramaLink = document.querySelector('#menu a.go');
 function dioramaHref(at = spawn.key) {
+  if (koktokay) return './tools/map-editor/?map=koktokay';
   const placed = state !== 'title' && state !== 'swoop'; // not on the mountain yet
-  return `./diorama.html?at=${at}${placed ? `&you=${whereaboutsParam(whereabouts())}` : ''}`;
+  return `./diorama.html?map=${dataset}&at=${at}${placed ? `&you=${whereaboutsParam(whereabouts())}` : ''}`;
 }
 function linkDiorama() {
   dioramaLink.href = dioramaHref();

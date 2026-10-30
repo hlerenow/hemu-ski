@@ -12,7 +12,11 @@ backdrop at 125 m resolution. The Runs and Objects panels list all mapped runs
 and lifts; click a row to frame it. Large and Small Wolf King routes retain
 their OpenStreetMap names and any "estimated" qualifier. The Koktokay Trees
 tool uses estimated forest placement from the terrain, not mapped tree
-locations; OpenStreetMap has no forest polygons in this area. Ride is
+locations; OpenStreetMap has no forest polygons in this area. The Objects tool
+shows 3D lift stations, towers, cables, cabins and a ski hall beside the base
+stations. The hall's location and size are estimates; select it in the Objects
+list to move or rotate it. Lift stations can be moved, and the 3D lift follows
+the edited OSM line after the move is committed. Ride is
 unavailable because the game is specific to Jikepulin. Use
 `?map=koktokay&original` to inspect the unmodified bake. Regenerate the data
 with `npm run fetch-koktokay`.

@@ -34,11 +34,12 @@ const LIFT = 1.5; // m above the ground
 const STEP = 6; // drape sample spacing (m)
 
 export class ObjectsView {
-  constructor(hf, map, { includePlaces = true, pois = [] } = {}) {
+  constructor(hf, map, { includePlaces = true, pois = [], customPlaces = [] } = {}) {
     this.hf = hf;
     this.map = map;
     this.includePlaces = includePlaces;
     this.pois = pois;
+    this.customPlaces = customPlaces;
     this.group = new THREE.Group();
     this.mats = [2, 3.5].map((linewidth) => new LineMaterial({ linewidth, vertexColors: true, worldUnits: false }));
     // Everything, then the hovered and selected ones again, drawn heavier.
@@ -79,6 +80,12 @@ export class ObjectsView {
     for (const id of this.includePlaces ? PLACE_IDS : []) {
       const info = PLACES[id], { x, z, yaw } = placeOf(id);
       items.push({ id, kind: 'place', x, z, yaw, hw: info.size[0], hd: info.size[1], round: info.round, color: info.color, clearing: info.clearing });
+    }
+    for (const spec of this.customPlaces) {
+      const { x, z, yaw } = this.map.places[spec.id] || spec;
+      items.push({ id: spec.id, kind: 'place', x, z, yaw,
+        hw: 60 * spec.scale, hd: 25.5 * spec.scale, color: '#7d5ba6',
+        estimated: true, name: spec.name, en: spec.en });
     }
     for (const poi of this.pois) items.push({ id: `osm:${poi.id}`, kind: 'poi', name: poi.name || '未命名索道站', poiType: poi.type,
       x: poi.x, z: poi.z, yaw: 0, hw: 3, hd: 3, round: true, color: '#bd7b2d' });
@@ -235,12 +242,12 @@ export class ObjectsView {
   label(id) {
     const it = this.byId.get(id);
     if (!it) return '';
-    if (it.kind === 'place') return PLACES[id].name;
+    if (it.kind === 'place') return it.name || PLACES[id].name;
     if (it.kind === 'poi') return it.name;
     const lift = this.map.lifts[it.li];
     return `${lift.name || (lift.type === 'magic_carpet' ? 'Magic carpet' : 'Lift')} · ${this.#isTop(it) ? 'top' : 'bottom'} ${it.hw ? 'station' : 'end'}`;
   }
-  zh(id) { return PLACES[id]?.zh ?? ''; }
+  zh(id) { return this.byId.get(id)?.en || PLACES[id]?.zh || ''; }
   color(id) { return this.byId.get(id)?.color ?? STATION; }
   #isTop(it) {
     const other = this.byId.get(`lift:${it.li}:${1 - it.end}`);
