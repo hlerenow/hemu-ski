@@ -1,6 +1,7 @@
 // Board frame: body +z points over the toes. Negative edge roll inclines
 // toward the toe edge; Shift deepens the turn while keeping the spine tall.
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const TOE_ARCH = 8; // Multiplier of the original hip/spine back-arch angles.
 export class BoardPose {
   constructor() {
     this.state = { edge: 0, deep: 0, tuck: 0, compression: 0, air: 0, grab: 0, touch: 0, twist: 0 };
@@ -52,8 +53,8 @@ export class BoardPose {
     // Toe edge: extend through the hips with a pronounced back arch. Heel edge:
     // the left fingertips may brush snow; the right arm stays bent up/back.
     const tall = { py: 0.74 + breath, pz: edge < 0 ? 0.015 : -0.015,
-      pPitch: edge < 0 ? -0.12 : 0.025, pRoll: 0,
-      tPitch: edge < 0 ? -0.32 : 0.04, tYaw: 0.12, tRoll: 0,
+      pPitch: edge < 0 ? -0.06 * TOE_ARCH : 0.025, pRoll: 0,
+      tPitch: edge < 0 ? -0.16 * TOE_ARCH : 0.04, tYaw: 0.12, tRoll: 0,
       hPitch: -0.08, kneeOut: 0.1, kneeShift: 0, crouch: 0.14 };
     for (const [key, target] of Object.entries(tall)) x[key] += (target - x[key]) * deep;
     if (edge > 0) for (const [key, target] of Object.entries({rPitch: -0.85, rRoll: -1.85, rElbow: -1.35})) {
