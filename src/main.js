@@ -1,6 +1,8 @@
 import { setLoadingProgress, setLoadingArrival, finishLoading } from './loading.js';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel, modelLoads } from './render/model-loader.js';
+import { MOBILE } from './render/quality.js';
+import { sceneMemory } from './render/memory.js';
 import { retarget } from './player/rider-model.js';
 import { makeActionLoop } from './player/action-loop.js';
 import { SERVICE_CENTRES, PISTE_HALF_WIDTH, ONSEN } from './world/data.js';
@@ -103,11 +105,12 @@ const mainRun = meta.runs.find((r) => r.name === MAIN_RUN);
 // lakes' water, the piste markers and the start banner.
 const scenery = createResort(resort, {
   terrain: { tiles: 9, lodDistance: 1200, nearDistance: 300, corduroy: true },
+  forest: MOBILE ? { maxNearInstances: 4096 } : {},
   labels: new URLSearchParams(location.search).has('labels'),
 });
 const { terrain, lodges, forest, lifts, onsen, summit, water } = scenery;
 scene.add(scenery.group);
-const backdrop = createBackdrop(resort.backdrop, detail);
+const backdrop = createBackdrop(resort.backdrop, detail, { stride: MOBILE ? 2 : 1 });
 scene.add(backdrop);
 // The rings that spread on the water from the boat's oars.
 const ripples = new Ripples();
@@ -201,7 +204,7 @@ async function playSpecialAction(id) {
   pendingAction = id;
   actionStatus.textContent = `Loading ${item.label}…`;
   try {
-    if (!actionFiles.has(id)) actionFiles.set(id, new GLTFLoader().loadAsync(import.meta.env.BASE_URL + `models/motions/special-actions-v01/${id}.glb`).catch((err) => { actionFiles.delete(id); throw err; }));
+    if (!actionFiles.has(id)) actionFiles.set(id, loadModel(import.meta.env.BASE_URL + `models/motions/special-actions-v01/${id}.glb`).catch((err) => { actionFiles.delete(id); throw err; }));
     const source = await actionFiles.get(id);
     if (request !== actionRequest) return;
     pendingAction = null;
@@ -2480,6 +2483,6 @@ if (askedDest || backAt) arrive(askedDest ?? spawn, backAt ?? askedDest);
 
 // Handy for poking at things from the console.
 const debug = { cam: null };
-window.__game = { npcs, dialogue, phys, rider, camera, mouseLook, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, foxes, horse, mountHorse, getOffHorse, summit, wheels, turnWheel, sound, rides, lifts, board, get liftRide() { return liftRide; }, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
+window.__game = { memory: () => ({ profile: MOBILE ? 'mobile' : 'desktop', loads: { ...modelLoads }, ...sceneMemory(scene), nearTreeCount: forest.group.children.find(o => o.isBatchedMesh).instanceCount, nearTreeCapacity: forest.group.children.find(o => o.isBatchedMesh).maxInstanceCount }), npcs, dialogue, phys, rider, camera, mouseLook, scene, weather, input, startRun, debug, cabin, forest, resolveDestination, bigMap, openMap, whereabouts, gps, vehicles, getIn, getOut, lakes, ripples, onsen, soak, leavePool, dog, petDog, throwSnowball, foxes, horse, mountHorse, getOffHorse, summit, wheels, turnWheel, sound, rides, lifts, board, get liftRide() { return liftRide; }, get car() { return car; }, get state() { return state; }, get spawn() { return spawn; } };
 await finishLoading();
 requestAnimationFrame(frame);

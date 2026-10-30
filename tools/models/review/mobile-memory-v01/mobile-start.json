@@ -1,0 +1,263 @@
+{
+  "memory": {
+    "geometryArrayBytes": 115488172,
+    "imageCount": 55,
+    "imageRGBABytesEstimate": 80351232,
+    "images": [
+      {
+        "height": 256,
+        "width": 1024
+      },
+      {
+        "height": 256,
+        "width": 1024
+      },
+      {
+        "height": 256,
+        "width": 256
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 64,
+        "width": 16
+      },
+      {
+        "height": 64,
+        "width": 16
+      },
+      {
+        "height": 64,
+        "width": 16
+      },
+      {
+        "height": 256,
+        "width": 256
+      },
+      {
+        "height": 256,
+        "width": 256
+      },
+      {
+        "height": 256,
+        "width": 256
+      },
+      {
+        "height": 256,
+        "width": 256
+      },
+      {
+        "height": 256,
+        "width": 256
+      },
+      {
+        "height": 256,
+        "width": 256
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 108,
+        "width": 512
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 256,
+        "width": 1024
+      },
+      {
+        "height": 256,
+        "width": 128
+      },
+      {
+        "height": 256,
+        "width": 512
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 64,
+        "width": 64
+      },
+      {
+        "height": 64,
+        "width": 64
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 1024,
+        "width": 512
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 64,
+        "width": 64
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 64,
+        "width": 64
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 64,
+        "width": 64
+      },
+      {
+        "height": 64,
+        "width": 64
+      }
+    ],
+    "loads": {
+      "active": 0,
+      "completed": 20,
+      "failed": 0,
+      "peak": 2
+    },
+    "nearTreeCapacity": 4096,
+    "nearTreeCount": 0,
+    "nonFinitePositions": 0,
+    "profile": "mobile"
+  },
+  "model": "male",
+  "resources": [
+    "trees/trees.glb",
+    "lift-pylon/lift-pylon-no-sign-v03.glb",
+    "lifts/cabin.glb",
+    "lifts/chair.glb",
+    "mobile-v01/lifts/station-mobile-v01.glb",
+    "mobile-v01/onsen/stone-arena-mobile-v01.glb",
+    "mobile-v01/onsen/cave-rock-mobile-v01.glb",
+    "mobile-v01/prayer-wheels/prayer-wheels-mobile-v01.glb",
+    "mobile-v01/coffee-cabin/coffee-cabin-mobile-v01.glb",
+    "mobile-v01/truck/pickup-mobile-v01.glb",
+    "mobile-v01/snowmobile/snowmobile-mobile-v01.glb",
+    "mobile-v01/jetson/jetson-one-mobile-v01.glb",
+    "mobile-v01/dog/old-english-sheepdog-mobile-v01.glb",
+    "fox/red-fox.glb",
+    "mobile-v01/horse/altai-horse-mobile-v01.glb",
+    "mobile-v01/saddle/kazakh-saddle-mobile-v01.glb",
+    "mobile-v01/player-mobile-v01.glb",
+    "motions/rider-locomotion-v02/female-locomotion-v02.glb",
+    "motions/baseball-pitching-v01/baseball-pitching-v01.glb",
+    "motions/weight-shift-idle-v01/weight-shift-idle-v01.glb"
+  ],
+  "state": "intro"
+}

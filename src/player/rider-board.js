@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from '../render/model-loader.js';
 import { makeToon } from '../render/toon.js';
 
 // Assembly coordinates match the body frame: length X, toes +Z.
 // The deck is scaled uniformly to the game's 1.56 m length, keeping its generated
 // width. Bindings retain their own proportions.
 export async function loadBoardAssembly(rider) {
-  const gltf = await new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'models/female-rider/board-assembly-seg-tex2k-v01.glb');
+  const gltf = await loadModel(import.meta.env.BASE_URL + 'models/female-rider/board-assembly-seg-tex2k-v01.glb');
   gltf.scene.updateMatrixWorld(true);
   const root = new THREE.Group();
   root.name = 'FemaleBoardAssembly';

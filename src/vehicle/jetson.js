@@ -11,7 +11,7 @@
 // hands go in that frame (see Rider.setLocomotion): the hands on the sticks'
 // handles, which `update` moves with the sticks.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from '../render/model-loader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeToon } from '../render/toon.js';
 
@@ -50,7 +50,7 @@ export class Jetson {
     this.exits = []; // where you step off: { along, left }, the left first
     this.t = 0;
     this.hover = 0; // 0 on the ground … 1 in the air, for the bob
-    this.ready = new GLTFLoader().loadAsync(FILE).then((gltf) => this.#build(gltf));
+    this.ready = loadModel(FILE).then((gltf) => this.#build(gltf));
   }
 
   #build(gltf) {

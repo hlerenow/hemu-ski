@@ -214,9 +214,9 @@ export class Rider {
     if (id !== 'classic') {
       if (!this.models.has(id)) {
         this.models.set(id, import('./rider-model.js')
-          .then(async ({ RIDER_MODELS, loadRiderModel, loadPitching, loadIdle, loadChairSitting, RiderModel }) => {
+          .then(async ({ RIDER_MODELS, loadRiderModel, loadRiderLocomotion, loadPitching, loadIdle, loadChairSitting, RiderModel }) => {
             const from = RIDER_MODELS[id].walkFrom;
-            const [gltf, borrow, pitching, idle, chair] = await Promise.all([loadRiderModel(id), from ? loadRiderModel(from) : null, loadPitching().catch((err) => { console.warn('Pitching animation unavailable; using procedural throw.', err); return null; }), loadIdle().catch((err) => { console.warn('Idle animation unavailable.', err); return null; }), id === 'female' ? loadChairSitting().catch((err) => { console.warn('Chair animation unavailable; using seated pose.', err); return null; }) : null]);
+            const [gltf, borrow, pitching, idle, chair] = await Promise.all([loadRiderModel(id), from ? loadRiderLocomotion(from) : null, loadPitching().catch((err) => { console.warn('Pitching animation unavailable; using procedural throw.', err); return null; }), loadIdle().catch((err) => { console.warn('Idle animation unavailable.', err); return null; }), id === 'female' ? loadChairSitting().catch((err) => { console.warn('Chair animation unavailable; using seated pose.', err); return null; }) : null]);
             return new RiderModel(gltf, id, { borrow, pitching, idle, chair });
           })
           .catch((err) => { this.models.delete(id); throw err; }));

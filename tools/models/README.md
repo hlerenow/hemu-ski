@@ -1,5 +1,46 @@
 # Model tools
 
+## mobile-assets.py
+
+```bash
+python3 tools/models/mobile-assets.py
+```
+
+Requires Pillow. Builds new files under `public/models/mobile-v01/`, leaving the
+source GLBs intact. Embedded images larger than 1024 px are resized with LANCZOS;
+JPEG output uses quality 95 and 4:4:4 chroma. All other buffer views, accessors,
+nodes, meshes, skins, materials and animation metadata are checked against the
+source. `manifest.json` records source/output hashes, sizes and dimensions.
+Existing assets are accepted only if byte-identical; use a new version for a
+changed source or recipe.
+
+Also extracts the female walk/run hierarchy and clips to
+`motions/rider-locomotion-v02/`, without meshes or textures. Joint declarations
+are retained so GLTFLoader creates Bones. The male rider uses this reference
+instead of loading the whole female model. The regression test compares the
+resulting retargeted tracks to the original.
+
+All shipped GLBs go through `src/render/model-loader.js`: phones select the
+manifest variant before loading, with at most two downloads/decodes in flight.
+Desktop keeps the original files and concurrency. The completed result does
+not retain GLTFLoader's parser cache; images/vertex arrays remain available for
+context recovery. Per-model promise caches remain shared and release failed
+requests for retry.
+
+`?quality=mobile` and `?quality=desktop` force a profile for comparison. Otherwise
+mobile user agents and touch/coarse devices with a short screen side <=1024 px
+use mobile resources. Selection is fixed for the page lifetime, including
+rotation. Resizing a desktop window alone does not select phone assets.
+
+`npm test` includes `tests/mobile-memory.mjs`: immutable asset hashes/non-image
+bytes, subpath URLs, a failing queued load, exact DEM posts, finite attributes,
+fixed forest capacity and byte-identical retargeted locomotion. For the running
+game, `window.__game.memory()` returns a scene inventory; it excludes unattached
+caches, renderer internals and audio, and is not total CPU/GPU process memory.
+
+Implementation, measured comparisons, screenshots, review scope and pending
+device checks: [mobile-memory-v01 review](review/mobile-memory-v01/README.md).
+
 ## strip-maps.mjs
 
 ```bash

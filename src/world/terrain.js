@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { makeToon } from '../render/toon.js';
-import { PISTE_HALF_WIDTH } from './data.js';
+import { PISTE_HALF_WIDTH, Heightfield } from './data.js';
 import { mountainMaterial } from './mountain-material.js';
 
 const C = {
@@ -303,7 +303,16 @@ function flowMap(h, n) {
   return blurGrid(acc, n, 1);
 }
 
-export function createBackdrop(hf, detail) {
+export function createBackdrop(hf, detail, { stride = 1 } = {}) {
+  if (!Number.isInteger(stride) || stride < 1 || hf.cells % stride !== 0) throw new Error('Backdrop stride must divide its cell count');
+  if (stride > 1) {
+    // Sample original DEM posts, before allocating mesh/blur/flow arrays.
+    // No smoothing or invented heights; physics keeps the original field.
+    const cells = hf.cells / stride, n = cells + 1;
+    const heights = new Float32Array(n * n);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) heights[j * n + i] = hf.h[j * stride * hf.verts + i * stride];
+    hf = new Heightfield(hf.size, cells, heights, hf.center);
+  }
   // Use DEM heights unchanged. Only the hidden overlap is sunk, as before.
   // No synthetic peaks, vertical exaggeration, noise displacement or smoothing.
   const g = gridGeometry(hf, (x, z) => (detail.inside(x, z, 20) ? -80 : 0));

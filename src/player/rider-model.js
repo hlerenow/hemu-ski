@@ -2,7 +2,7 @@
 // on-foot movement plays the authored walk/run clips without procedural posing.
 // Model and body coordinates: +Z facing, character left +X.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from '../render/model-loader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { makeToon } from '../render/toon.js';
 import { THROW, ON_FOOT, sample, throwWeight } from './throw.js';
@@ -43,19 +43,28 @@ const BOARD_TOP = 0.025;
 const FADE = 0.25;
 const _fade = new THREE.Quaternion();
 const loading = new Map();
+const locomotionLoading = new Map();
+export function loadRiderLocomotion(id) {
+  if (id !== 'female') throw new Error(`No separate locomotion asset for ${id}`);
+  if (!locomotionLoading.has(id)) {
+    locomotionLoading.set(id, loadModel(import.meta.env.BASE_URL + 'models/motions/rider-locomotion-v02/female-locomotion-v02.glb')
+      .catch((err) => { locomotionLoading.delete(id); throw err; }));
+  }
+  return locomotionLoading.get(id);
+}
 let pitchingPromise, idlePromise, chairPromise;
 export function loadChairSitting() {
-  chairPromise ||= new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'models/motions/chairlift-sitting-v01/chairlift-sitting-v01.glb')
+  chairPromise ||= loadModel(import.meta.env.BASE_URL + 'models/motions/chairlift-sitting-v01/chairlift-sitting-v01.glb')
     .catch((err) => { chairPromise = null; throw err; });
   return chairPromise;
 }
 export function loadIdle() {
-  idlePromise ||= new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'models/motions/weight-shift-idle-v01/weight-shift-idle-v01.glb')
+  idlePromise ||= loadModel(import.meta.env.BASE_URL + 'models/motions/weight-shift-idle-v01/weight-shift-idle-v01.glb')
     .catch((err) => { idlePromise = null; throw err; });
   return idlePromise;
 }
 export function loadPitching() {
-  pitchingPromise ||= new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'models/motions/baseball-pitching-v01/baseball-pitching-v01.glb')
+  pitchingPromise ||= loadModel(import.meta.env.BASE_URL + 'models/motions/baseball-pitching-v01/baseball-pitching-v01.glb')
     .catch((err) => { pitchingPromise = null; throw err; });
   return pitchingPromise;
 }
@@ -65,7 +74,7 @@ export function loadRiderModel(id = 'male', outfit = null) {
   if (!file) throw new Error(`Unknown rider: ${id}${outfit ? ` in ${outfit}` : ''}`);
   const key = outfit ? `${id}:${outfit}` : id;
   if (!loading.has(key)) {
-    loading.set(key, new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'models/' + file)
+    loading.set(key, loadModel(import.meta.env.BASE_URL + 'models/' + file)
       .catch((err) => { loading.delete(key); throw err; }));
   }
   return loading.get(key);

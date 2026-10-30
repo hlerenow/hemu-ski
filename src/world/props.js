@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from '../render/model-loader.js';
 import { makeToon } from '../render/toon.js';
 import { PISTE_HALF_WIDTH } from './data.js';
 import { liftStations } from './stations.js';
@@ -51,9 +51,8 @@ const MODEL_DIR = import.meta.env.BASE_URL + 'models/lifts/';
 let modelsLoading = null;
 export function loadLiftModels() {
   return (modelsLoading ||= (async () => {
-    const loader = new GLTFLoader();
     const [cabin, chair, station] = await Promise.all(
-      ['cabin', 'chair', 'station'].map((n) => loader.loadAsync(`${MODEL_DIR}${n}.glb`).then(meshOf)),
+      ['cabin', 'chair', 'station'].map((n) => loadModel(`${MODEL_DIR}${n}.glb`).then(meshOf)),
     );
     const cabinGeo = hangFromGrip(cabin.geometry, CABIN_H);
     const stationGeo = station.geometry;
@@ -172,7 +171,7 @@ const PYLON_URL = `${import.meta.env.BASE_URL}models/lift-pylon/lift-pylon-no-si
 const pylonToon = makeToon({ vertexColors: true }, { hatch: 0, rim: 0 });
 let pylonModel;
 function loadChairliftPylon() {
-  if (!pylonModel) pylonModel = new GLTFLoader().loadAsync(PYLON_URL).then(({ scene }) => {
+  if (!pylonModel) pylonModel = loadModel(PYLON_URL).then(({ scene }) => {
     const body = scene.getObjectByName('pylon');
     const trains = ['train-l', 'train-r'].map(name => scene.getObjectByName(name));
     if (!body?.geometry || trains.some(train => !train)) throw new Error('Unexpected lift pylon structure');

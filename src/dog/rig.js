@@ -7,14 +7,14 @@
 // y = 0, about a unit from nose to tail. Every bone points along its own +y,
 // toward the next joint.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from '../render/model-loader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { makeToon } from '../render/toon.js';
 
 const FILE = import.meta.env.BASE_URL + 'models/dog/old-english-sheepdog.glb';
 let loading = null;
 export function loadDog() {
-  loading ||= new GLTFLoader().loadAsync(FILE).catch((err) => { loading = null; throw err; });
+  loading ||= loadModel(FILE).catch((err) => { loading = null; throw err; });
   return loading;
 }
 

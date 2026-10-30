@@ -5,7 +5,7 @@
 // truck.root sits on the ground between the axles and follows the terrain
 // under the four wheels; the body leans on its springs inside it.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from '../render/model-loader.js';
 import { makeToon } from '../render/toon.js';
 
 const FILE = import.meta.env.BASE_URL + 'models/truck/pickup.glb';
@@ -26,7 +26,7 @@ export class Truck {
     // the middle, the driver's door first.
     this.marks = [];
     this.exits = [];
-    this.ready = new GLTFLoader().loadAsync(FILE).then((gltf) => this.#build(gltf));
+    this.ready = loadModel(FILE).then((gltf) => this.#build(gltf));
     this.lean = { pitch: 0, roll: 0, vp: 0, vr: 0 };
   }
 

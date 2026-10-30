@@ -13,7 +13,7 @@
 // follows. The seat is in metres in the same axes, as the
 // snowmobile's is, since the rider's body frame matches the vehicle's.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from '../render/model-loader.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { makeToon } from '../render/toon.js';
 import { Bridle } from './bridle.js';
@@ -21,7 +21,7 @@ import { Bridle } from './bridle.js';
 const SADDLE_FILE = import.meta.env.BASE_URL + 'models/saddle/kazakh-saddle.glb';
 let loading = null;
 export function loadSaddle() {
-  loading ||= new GLTFLoader().loadAsync(SADDLE_FILE).catch((err) => { loading = null; throw err; });
+  loading ||= loadModel(SADDLE_FILE).catch((err) => { loading = null; throw err; });
   return loading;
 }
 

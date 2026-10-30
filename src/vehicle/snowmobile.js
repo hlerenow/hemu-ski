@@ -8,7 +8,7 @@
 // root follows `saddle`, which turns with the body, and `seat` says where their
 // hips, feet and hands go in that frame (see Rider.setLocomotion).
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from '../render/model-loader.js';
 import { makeToon } from '../render/toon.js';
 import { springTo, subsetGeometry } from './truck.js';
 
@@ -42,7 +42,7 @@ export class Snowmobile {
     this.marks = []; // the track's and the skis' lines in the snow: { along, left, width } from the middle
     this.exits = []; // where you step off: { along, left }, the left first
     this.lean = { pitch: 0, roll: 0, vp: 0, vr: 0 };
-    this.ready = new GLTFLoader().loadAsync(FILE).then((gltf) => this.#build(gltf));
+    this.ready = loadModel(FILE).then((gltf) => this.#build(gltf));
   }
 
   #build(gltf) {
