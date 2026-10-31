@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import * as THREE from 'three';
-import { firstPersonTarget } from '../src/player/ride-camera.js';
+import { firstPersonTarget, firstPersonRearMask } from '../src/player/ride-camera.js';
 import { installFirstPersonMask, patchFirstPersonMaterial } from '../src/render/first-person-mask.js';
 import { InkPost } from '../src/render/post.js';
 
@@ -56,28 +56,43 @@ vm.runInContext(handler('cameraTarget')+'\n'+handler('updateRideCamera'),cameraC
 cameraContext.updateRideCamera(1/60);
 assert(camera.position.distanceTo(eye)<1e-9); assert(camera.fov>=96); assert(camera.near<0.1);
 console.log('PASS first-person camera uses the forehead anchor and wide lens in the real game loop');
+const forward = new THREE.Vector3(0,0,-1);
+assert.equal(firstPersonRearMask(forward,forward),0);
+assert.equal(firstPersonRearMask(forward.clone().negate(),forward),1);
+assert.equal(firstPersonRearMask(forward,forward.clone().negate()),1,'reversing the rider also clears rear-view body occlusion');
+let previousMask=0;
+for(let degrees=0;degrees<=180;degrees+=2){
+  const view=forward.clone().applyAxisAngle(new THREE.Vector3(0,1,0),degrees*Math.PI/180);
+  const value=firstPersonRearMask(view,forward);
+  assert(value>=previousMask && value-previousMask<0.08,'rear body masking fades continuously while looking around');
+  previousMask=value;
+}
 
 // The same cutout must be present in the lit/depth and outline normal passes.
 const root = new THREE.Group(), head = new THREE.Group(); root.add(head);
 const original = new THREE.MeshLambertMaterial();
 const headMesh = new THREE.Mesh(new THREE.BoxGeometry(),original), arm = new THREE.Mesh(new THREE.BoxGeometry(),original);
 head.add(headMesh); root.add(arm);
-const mask = installFirstPersonMask(root,head);
+const torso = new THREE.Group(), shoulder = new THREE.Group(); root.add(torso); torso.add(shoulder); shoulder.add(arm);
+const chest = new THREE.Mesh(new THREE.BoxGeometry(),original); torso.add(chest);
+const mask = installFirstPersonMask(root,head,{torso,arms:[shoulder]});
 const npc = new THREE.Group(), npcHead=new THREE.Group(); npc.add(npcHead);
 npcHead.add(new THREE.Mesh(new THREE.BoxGeometry(),original));
 const other = installFirstPersonMask(npc,npcHead);
 assert.notEqual(mask.id,other.id); assert.notEqual(arm.material,original);
 assert.equal(headMesh.geometry.attributes.aHeadWeight.getX(0),1); assert.equal(arm.geometry.attributes.aHeadWeight.getX(0),0);
+assert.equal(chest.geometry.attributes.aFirstPersonBody.getX(0),1); assert.equal(arm.geometry.attributes.aFirstPersonBody.getX(0),0,'rear-view torso masking retains the arms');
 for(const [material,shaderName] of [[arm.material,'lambert'],[new THREE.MeshNormalMaterial(),'normal']]) {
   if(shaderName==='normal') patchFirstPersonMaterial(material,mask);
   const lib=THREE.ShaderLib[shaderName], shader={uniforms:{},vertexShader:lib.vertexShader,fragmentShader:lib.fragmentShader};
   material.onBeforeCompile(shader);
   assert.equal(shader.uniforms.uFirstPersonId,mask);
+  assert.equal(shader.uniforms.uFirstPersonRear,mask.rear);
   assert(shader.fragmentShader.includes('length(vFirstPersonView) < 0.24'));
   assert(shader.fragmentShader.includes('abs(vFirstPersonId - uFirstPersonId)'));
 }
-let normalId;
-const renderer={shadowMap:{autoUpdate:true},setRenderTarget:()=>{},setClearColor:()=>{},getClearColor:out=>out.set(0),getClearAlpha:()=>1,clear:()=>{},render:scene=>{if(scene.overrideMaterial)normalId=post.firstPersonId.value;}};
-const post=new InkPost(renderer); post.render(new THREE.Scene(),camera,0,[],mask.id);
-assert.equal(normalId,mask.id); post.render(new THREE.Scene(),camera,0); assert.equal(normalId,0);
+let normalId,normalRear;
+const renderer={shadowMap:{autoUpdate:true},setRenderTarget:()=>{},setClearColor:()=>{},getClearColor:out=>out.set(0),getClearAlpha:()=>1,clear:()=>{},render:scene=>{if(scene.overrideMaterial){normalId=post.firstPersonId.value;normalRear=post.firstPersonId.rear.value;}}};
+const post=new InkPost(renderer); post.render(new THREE.Scene(),camera,0,[],mask.id,1);
+assert.equal(normalId,mask.id); assert.equal(normalRear,1); post.render(new THREE.Scene(),camera,0); assert.equal(normalId,0); assert.equal(normalRear,0);
 console.log('PASS player-only camera clearance and matching color/depth/normal masks; NPCs remain independent');

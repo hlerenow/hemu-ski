@@ -161,10 +161,12 @@ export class Rider {
     return out.addScaledVector(new THREE.Vector3(0, 0, 1).applyQuaternion(frame), 0.2);
   }
 
-  firstPersonBody(enabled) {
+  firstPersonBody(enabled, rear = 0) {
     this.head.visible = !enabled;
     this.classicFirstPersonMask.value = enabled ? this.classicFirstPersonMask.id : 0;
+    this.classicFirstPersonMask.rear.value = rear;
     if (this.model) this.model.firstPersonMask.value = enabled ? this.model.firstPersonMask.id : 0;
+    if (this.model) this.model.firstPersonMask.rear.value = rear;
     return enabled ? (this.model?.firstPersonMask || this.classicFirstPersonMask).id : 0;
   }
 
@@ -192,7 +194,7 @@ export class Rider {
     this.bindings = [];
     this.boots = []; // primitive boots and straps, hidden when the model boots stand in them
     this.#buildCharacter();
-    this.classicFirstPersonMask = installFirstPersonMask(this.classic, this.head);
+    this.classicFirstPersonMask = installFirstPersonMask(this.classic, this.head, {torso:this.torso,arms:[this.armL.sh,this.armR.sh]});
     this.stance = this.feet.map((f) => f.position.clone()); // the feet on the board
     // Skis (see rider-skis.js): one under each boot, turning with the foot,
     // and a pole in each hand. `gear` says which you ride: 'board' or 'ski'.

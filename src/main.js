@@ -1,5 +1,5 @@
 import './ui-zh.js';
-import { firstPersonTarget } from './player/ride-camera.js';
+import { firstPersonTarget, firstPersonRearMask } from './player/ride-camera.js';
 import { setLoadingProgress, setLoadingArrival, finishLoading } from './loading.js';
 import * as THREE from 'three';
 import { loadModel, modelLoads } from './render/model-loader.js';
@@ -1231,8 +1231,10 @@ function frame() {
   updateWeatherPanel();
 
   // Normal-edge lines fade out by ~600 m, so far geometry can skip that pass.
-  const firstPersonId = rider.firstPersonBody(firstPerson && state === 'ride' && phys.crashed <= 0);
-  post.render(scene, camera, time, [sky, weather.snowfall.points, spray.points, dog.spray.points, ...(foxes ? [foxes.spray.points] : []), ...(horse ? horse.sprays : []), specks.points, backdrop, ripples.group, ...forest.farMeshes, ...marks.hidden], firstPersonId);
+  const foreheadView = firstPerson && state === 'ride' && phys.crashed <= 0;
+  const rearMask = foreheadView ? firstPersonRearMask(camera.getWorldDirection(_v), phys.forward(_f)) : 0;
+  const firstPersonId = rider.firstPersonBody(foreheadView, rearMask);
+  post.render(scene, camera, time, [sky, weather.snowfall.points, spray.points, dog.spray.points, ...(foxes ? [foxes.spray.points] : []), ...(horse ? horse.sprays : []), specks.points, backdrop, ripples.group, ...forest.farMeshes, ...marks.hidden], firstPersonId, rearMask);
   rider.firstPersonBody(false);
   requestAnimationFrame(frame);
 }

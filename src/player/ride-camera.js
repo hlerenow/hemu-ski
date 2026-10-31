@@ -1,6 +1,15 @@
 import * as THREE from 'three';
 const up = new THREE.Vector3(0, 1, 0);
 const direction = new THREE.Vector3();
+const riderDirection = new THREE.Vector3();
+
+// Use actual world directions: steering can reverse the rider while the
+// camera is still following velocity, even without moving the look controls.
+export function firstPersonRearMask(viewDirection, forward) {
+  direction.copy(viewDirection).setY(0).normalize();
+  riderDirection.copy(forward).setY(0).normalize();
+  return THREE.MathUtils.smoothstep(-direction.dot(riderDirection), -0.5, 0.2);
+}
 // The eye follows the posed head; mouse look keeps a readable horizon during
 // tricks. A slight downward gaze and wide lens include hands and the nose.
 export function firstPersonTarget(s, position, look) {

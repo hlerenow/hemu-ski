@@ -150,8 +150,9 @@ export class InkPost {
   }
 
   // `hideForNormals` objects (sky, particles) are skipped in the normal pass.
-  render(scene, camera, time, hideForNormals = [], firstPersonId = 0) {
+  render(scene, camera, time, hideForNormals = [], firstPersonId = 0, firstPersonRear = 0) {
     this.firstPersonId.value = firstPersonId;
+    this.firstPersonId.rear.value = firstPersonRear;
     const r = this.renderer;
     r.setRenderTarget(this.colorRT);
     r.render(scene, camera);
