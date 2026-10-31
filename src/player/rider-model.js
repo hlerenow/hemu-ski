@@ -769,7 +769,10 @@ export class RiderModel {
     const wrist = hand.getWorldPosition(new THREE.Vector3());
     const length = tip.getWorldPosition(new THREE.Vector3()).distanceTo(wrist);
     const to = world.clone().sub(wrist);
-    if (Math.abs(to.length() - length) > 0.025 || to.dot(normal) >= 0) return false;
+    const gap = Math.abs(to.length() - length);
+    if (gap >= 0.025 || to.dot(normal) >= 0) return false;
+    // Fade at the reach limit instead of snapping the wrist on/off there.
+    weight *= 1 - THREE.MathUtils.smoothstep(gap, 0.008, 0.025);
     const before = hand.quaternion.clone();
     const from = tip.getWorldPosition(new THREE.Vector3()).sub(wrist).normalize();
     this.#turnWorld(hand, new THREE.Quaternion().setFromUnitVectors(from, to.normalize()));

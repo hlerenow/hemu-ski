@@ -13,6 +13,7 @@ const orbit = new OrbitControls(camera,renderer.domElement); orbit.target.set(0,
 const rider = new Rider();scene.add(rider.root);
 const options = {
   glide:['直立滑行',{}], edge:['正常换刃',{lean:-1,twist:-0.5}], toe:['前刃反弓刻滑',{lean:-1,twist:-0.5,carve:true}], heel:['后刃刻滑摸雪',{lean:1,twist:0.5,carve:true,snowTouch:true}],
+  switch:['连续换刃',{}],
   tuck:['俯身加速',{tuck:true}], charge:['蓄力起跳',{charge:1}], air:['收腿平跳',{air:true}], grab:['空中抓板',{air:true,grab:true}], landing:['落地缓冲',{landing:0.6}],
 };
 let pose = new URLSearchParams(location.search).get('pose') || 'glide';
@@ -27,4 +28,4 @@ async function selectRider(id){document.getElementById('status').textContent='�
 document.getElementById('rider').onchange=e=>selectRider(e.target.value);selectRider('male');
 function resize(){renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}addEventListener('resize',resize);resize();
 const clock = new THREE.Clock();
-renderer.setAnimationLoop(()=>{const dt=Math.min(clock.getDelta(),0.05);const state=options[pose][1];rider.update(dt,{crouch:0.35,lean:0,twist:0,speed:16,...state});rider.root.position.y=state.air?0.9:0;rider.clearGround({heightAt:()=>0});orbit.update();renderer.render(scene,camera);});
+renderer.setAnimationLoop(()=>{const dt=Math.min(clock.getDelta(),0.05);const lean=Math.sin(clock.elapsedTime*2);const state=pose==='switch'?{lean,twist:lean*0.5,carve:true}:options[pose][1];rider.update(dt,{crouch:0.35,lean:0,twist:0,speed:16,...state});rider.root.position.y=state.air?0.9:0;rider.clearGround({heightAt:()=>0});orbit.update();renderer.render(scene,camera);});
