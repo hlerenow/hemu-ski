@@ -559,6 +559,12 @@ body.touch #prompt {
 @media (orientation: landscape) {
   body.touch #prompt { top: auto; bottom: calc(16px + env(safe-area-inset-bottom)); max-width: calc(100vw - 440px); font-size: 18px; }
 }
+/* On a lift there's no stick, only the button in the right corner: the prompt
+   drops to the foot of the screen, left of it, out of the view. */
+body.touch:has(#touch[data-layout='lift']) #prompt {
+  top: auto; bottom: calc(16px + env(safe-area-inset-bottom)); left: calc(16px + env(safe-area-inset-left)); transform: none;
+  max-width: calc(100vw - 150px - env(safe-area-inset-left) - env(safe-area-inset-right)); text-align: left;
+}
 
 body.touch #menu {
   left: calc(14px + env(safe-area-inset-left)); top: calc(14px + env(safe-area-inset-top)); transform: none;

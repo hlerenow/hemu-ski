@@ -1,0 +1,263 @@
+{
+  "memory": {
+    "geometryArrayBytes": 166532172,
+    "imageCount": 55,
+    "imageRGBABytesEstimate": 231346176,
+    "images": [
+      {
+        "height": 256,
+        "width": 1024
+      },
+      {
+        "height": 256,
+        "width": 1024
+      },
+      {
+        "height": 256,
+        "width": 256
+      },
+      {
+        "height": 2048,
+        "width": 2048
+      },
+      {
+        "height": 64,
+        "width": 16
+      },
+      {
+        "height": 64,
+        "width": 16
+      },
+      {
+        "height": 64,
+        "width": 16
+      },
+      {
+        "height": 256,
+        "width": 256
+      },
+      {
+        "height": 256,
+        "width": 256
+      },
+      {
+        "height": 256,
+        "width": 256
+      },
+      {
+        "height": 256,
+        "width": 256
+      },
+      {
+        "height": 256,
+        "width": 256
+      },
+      {
+        "height": 256,
+        "width": 256
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 2048,
+        "width": 2048
+      },
+      {
+        "height": 108,
+        "width": 512
+      },
+      {
+        "height": 2048,
+        "width": 2048
+      },
+      {
+        "height": 2048,
+        "width": 2048
+      },
+      {
+        "height": 2048,
+        "width": 2048
+      },
+      {
+        "height": 256,
+        "width": 1024
+      },
+      {
+        "height": 256,
+        "width": 128
+      },
+      {
+        "height": 256,
+        "width": 512
+      },
+      {
+        "height": 2048,
+        "width": 2048
+      },
+      {
+        "height": 64,
+        "width": 64
+      },
+      {
+        "height": 64,
+        "width": 64
+      },
+      {
+        "height": 2048,
+        "width": 2048
+      },
+      {
+        "height": 2048,
+        "width": 2048
+      },
+      {
+        "height": 2048,
+        "width": 2048
+      },
+      {
+        "height": 128,
+        "width": 128
+      },
+      {
+        "height": 1024,
+        "width": 512
+      },
+      {
+        "height": 2048,
+        "width": 2048
+      },
+      {
+        "height": 64,
+        "width": 64
+      },
+      {
+        "height": 1024,
+        "width": 1024
+      },
+      {
+        "height": 64,
+        "width": 64
+      },
+      {
+        "height": 2048,
+        "width": 2048
+      },
+      {
+        "height": 2048,
+        "width": 2048
+      },
+      {
+        "height": 64,
+        "width": 64
+      },
+      {
+        "height": 64,
+        "width": 64
+      }
+    ],
+    "loads": {
+      "active": 0,
+      "completed": 20,
+      "failed": 0,
+      "peak": 18
+    },
+    "nearTreeCapacity": 2048,
+    "nearTreeCount": 0,
+    "nonFinitePositions": 0,
+    "profile": "desktop"
+  },
+  "model": "male",
+  "resources": [
+    "trees/trees.glb",
+    "lift-pylon/lift-pylon-no-sign-v03.glb",
+    "lifts/cabin.glb",
+    "lifts/chair.glb",
+    "onsen/cave-rock.glb",
+    "lifts/station.glb",
+    "onsen/stone-arena.glb",
+    "prayer-wheels/prayer-wheels.glb",
+    "coffee-cabin/coffee-cabin.glb",
+    "truck/pickup.glb",
+    "snowmobile/snowmobile.glb",
+    "jetson/jetson-one.glb",
+    "dog/old-english-sheepdog.glb",
+    "horse/altai-horse.glb",
+    "saddle/kazakh-saddle.glb",
+    "fox/red-fox.glb",
+    "player.glb",
+    "motions/rider-locomotion-v02/female-locomotion-v02.glb",
+    "motions/baseball-pitching-v01/baseball-pitching-v01.glb",
+    "motions/weight-shift-idle-v01/weight-shift-idle-v01.glb"
+  ],
+  "state": "intro"
+}

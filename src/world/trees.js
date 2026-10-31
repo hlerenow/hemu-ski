@@ -14,7 +14,7 @@
 // trees (toyForest).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from '../render/model-loader.js';
 import { makeToon } from '../render/toon.js';
 import { vnoise } from './terrain.js';
 import { PISTE_HALF_WIDTH, SERVICE_CENTRES, ONSEN } from './data.js';
@@ -119,7 +119,7 @@ function farMaterial() {
 // its variants, each { lod0, lod1, height, radius }. Flat-shaded, as the rest
 // of the world is.
 export async function loadTreeModels() {
-  const gltf = await new GLTFLoader().loadAsync(import.meta.env.BASE_URL + 'models/trees/trees.glb');
+  const gltf = await loadModel(import.meta.env.BASE_URL + 'models/trees/trees.glb');
   const models = Object.fromEntries(SPECIES.map((s) => [s, []]));
   const byName = new Map();
   gltf.scene.traverse((o) => {
@@ -348,7 +348,8 @@ export function toyForest(trees, hf, piste, lifts, { scale, cell, per = scale * 
 // gives them (without, every species is the procedural tree). `chunk` and
 // `lodDistance` tune batching and where the far cones take over; `hiDistance`
 // is where the near trees drop to their lighter detail.
-export function createForest(hf, trees, { models = null, chunk = 250, lodDistance = 450, hiDistance = 160 } = {}) {
+export function createForest(hf, trees, { models = null, chunk = 250, lodDistance = 450, hiDistance = 160, maxNearInstances = Infinity } = {}) {
+  if (maxNearInstances !== Infinity && (!Number.isInteger(maxNearInstances) || maxNearInstances < 1)) throw new Error('Invalid near-tree budget');
   models ??= proceduralModels();
   const farGeo = buildTreeGeometry(1);
   const mat = makeToon({ vertexColors: true }, { hatch: 1 });
@@ -358,7 +359,7 @@ export function createForest(hf, trees, { models = null, chunk = 250, lodDistanc
   const variants = SPECIES.map((s) => models[s]);
   let verts = 0;
   for (const list of variants) for (const v of list) verts += v.lod0.attributes.position.count + v.lod1.attributes.position.count;
-  const near = new THREE.BatchedMesh(2048, verts, 0, mat);
+  const near = new THREE.BatchedMesh(Number.isFinite(maxNearInstances) ? maxNearInstances : 2048, verts, 0, mat);
   const geoIds = variants.map((list) => list.map((v) => [near.addGeometry(v.lod0), near.addGeometry(v.lod1)]));
   near.castShadow = true;
   near.receiveShadow = false;
@@ -465,18 +466,31 @@ export function createForest(hf, trees, { models = null, chunk = 250, lodDistanc
     farMeshes: [...batches.values()].flatMap((b) => [b.lo, ...b.chunks.map((c) => c.lo)]),
     update(camPos) {
       let changed = false;
+      const candidates = [];
       for (const b of batches.values()) {
         const far = b.center.distanceTo(camPos) > batchDistance;
         b.lo.visible = far;
         for (const c of b.chunks) {
-          const isNear = !far && c.center.distanceTo(camPos) < lodDistance;
-          c.lo.visible = !far && !isNear;
-          if (isNear && !c.ids) addChunk(c, camPos);
-          else if (!isNear && c.ids) dropChunk(c);
-          else continue;
-          changed = true;
+          const distance = c.center.distanceTo(camPos);
+          c.lo.visible = !far;
+          if (!far && distance < lodDistance) candidates.push({ c, distance });
         }
       }
+      // Nearest chunks win the fixed mobile budget. Keep far-tree coverage
+      // for every overflow chunk; collision data never depends on its LOD.
+      if (Number.isFinite(maxNearInstances)) candidates.sort((a, b) => a.distance - b.distance);
+      const selected = new Set();
+      let remaining = maxNearInstances;
+      for (const { c } of candidates) {
+        if (c.trees.length > remaining) continue;
+        selected.add(c);
+        remaining -= c.trees.length;
+        c.lo.visible = false;
+      }
+      // Free departing ids first, so crossing a boundary cannot temporarily
+      // need both the previous and next neighbourhood's capacity.
+      for (const c of nearChunks) if (!selected.has(c)) { dropChunk(c); changed = true; }
+      for (const c of selected) if (!c.ids) { addChunk(c, camPos); changed = true; }
       // Each near tree's detail, whenever the camera has moved a few metres.
       if (!changed && lastLod.distanceToSquared(camPos) < 16) return;
       lastLod.copy(camPos);

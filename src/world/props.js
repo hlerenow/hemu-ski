@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from '../render/model-loader.js';
 import { makeToon } from '../render/toon.js';
 import { PISTE_HALF_WIDTH } from './data.js';
 import { liftStations } from './stations.js';
@@ -51,9 +51,8 @@ const MODEL_DIR = import.meta.env.BASE_URL + 'models/lifts/';
 let modelsLoading = null;
 export function loadLiftModels() {
   return (modelsLoading ||= (async () => {
-    const loader = new GLTFLoader();
     const [cabin, chair, station] = await Promise.all(
-      ['cabin', 'chair', 'station'].map((n) => loader.loadAsync(`${MODEL_DIR}${n}.glb`).then(meshOf)),
+      ['cabin', 'chair', 'station'].map((n) => loadModel(`${MODEL_DIR}${n}.glb`).then(meshOf)),
     );
     const cabinGeo = hangFromGrip(cabin.geometry, CABIN_H);
     const stationGeo = station.geometry;
@@ -172,7 +171,7 @@ const PYLON_URL = `${import.meta.env.BASE_URL}models/lift-pylon/lift-pylon-no-si
 const pylonToon = makeToon({ vertexColors: true }, { hatch: 0, rim: 0 });
 let pylonModel;
 function loadChairliftPylon() {
-  if (!pylonModel) pylonModel = new GLTFLoader().loadAsync(PYLON_URL).then(({ scene }) => {
+  if (!pylonModel) pylonModel = loadModel(PYLON_URL).then(({ scene }) => {
     const body = scene.getObjectByName('pylon');
     const trains = ['train-l', 'train-r'].map(name => scene.getObjectByName(name));
     if (!body?.geometry || trains.some(train => !train)) throw new Error('Unexpected lift pylon structure');
@@ -271,8 +270,8 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
         }
         footprints.push({ x: P.x, z: P.z, yaw: lineYaw, hw: 5 * scale, hd: 5 * scale, top: P.y + 5.3 * scale, passable: true });
       }
-      for (const p of path.supports.slice(1, -1)) {
-        const ground = hf.heightAt(p.x, p.z);
+      for (let i = 1; i < path.supports.length - 1; i++) {
+        const p = path.supports[i], ground = hf.heightAt(p.x, p.z);
         // Keep a separate fallback so it can be removed only after the model loads.
         const fallback = new THREE.Group();
         const post = new THREE.Mesh(towerGeo, mats.steel);
@@ -281,7 +280,7 @@ export function createLifts(hf, lifts, { scale = 1, stationScale = scale, spacin
         arm.position.y = p.y - ground + 0.7 * scale;
         arm.rotation.y = lineYaw; arm.scale.setScalar(scale);
         fallback.add(post, arm); fallback.position.set(p.x, ground, p.z); group.add(fallback);
-        chairPylons.push({ fallback, x: p.x, z: p.z, ground, ropeHeight: p.y - ground, yaw: lineYaw });
+        chairPylons.push({ fallback, x: p.x, z: p.z, ground, ropeHeight: p.y - ground, yaw: lineYaw, pitch: sheavePitch(path.supports, i) });
         collisionParts.push({ x: p.x, z: p.z, yaw: 0, hw: 0.5 * scale, hd: 0.5 * scale, top: p.y + 0.5 * scale });
       }
       group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(path.points), mats.cable));

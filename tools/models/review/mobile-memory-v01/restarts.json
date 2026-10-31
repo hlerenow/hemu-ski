@@ -1,0 +1,77 @@
+[
+  {
+    "geometry": 115500460,
+    "imageBytes": 80351232,
+    "images": 55,
+    "loads": {
+      "active": 0,
+      "completed": 20,
+      "failed": 0,
+      "peak": 2
+    },
+    "nonFinite": 0,
+    "run": 1,
+    "state": "ride",
+    "treeCapacity": 4096
+  },
+  {
+    "geometry": 115500460,
+    "imageBytes": 80351232,
+    "images": 55,
+    "loads": {
+      "active": 0,
+      "completed": 20,
+      "failed": 0,
+      "peak": 2
+    },
+    "nonFinite": 0,
+    "run": 2,
+    "state": "ride",
+    "treeCapacity": 4096
+  },
+  {
+    "geometry": 115500460,
+    "imageBytes": 80351232,
+    "images": 55,
+    "loads": {
+      "active": 0,
+      "completed": 20,
+      "failed": 0,
+      "peak": 2
+    },
+    "nonFinite": 0,
+    "run": 3,
+    "state": "ride",
+    "treeCapacity": 4096
+  },
+  {
+    "geometry": 115500460,
+    "imageBytes": 80351232,
+    "images": 55,
+    "loads": {
+      "active": 0,
+      "completed": 20,
+      "failed": 0,
+      "peak": 2
+    },
+    "nonFinite": 0,
+    "run": 4,
+    "state": "ride",
+    "treeCapacity": 4096
+  },
+  {
+    "geometry": 115500460,
+    "imageBytes": 80351232,
+    "images": 55,
+    "loads": {
+      "active": 0,
+      "completed": 20,
+      "failed": 0,
+      "peak": 2
+    },
+    "nonFinite": 0,
+    "run": 5,
+    "state": "ride",
+    "treeCapacity": 4096
+  }
+]

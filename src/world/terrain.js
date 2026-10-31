@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { makeToon } from '../render/toon.js';
-import { PISTE_HALF_WIDTH } from './data.js';
+import { PISTE_HALF_WIDTH, Heightfield } from './data.js';
 import { mountainMaterial } from './mountain-material.js';
 
 const C = {
@@ -303,11 +303,19 @@ function flowMap(h, n) {
   return blurGrid(acc, n, 1);
 }
 
-export function createBackdrop(hf, detail, options = {}) {
+export function createBackdrop(hf, detail, { stride = 1 } = {}) {
+  if (!Number.isInteger(stride) || stride < 1 || hf.cells % stride !== 0) throw new Error('Backdrop stride must divide its cell count');
+  if (stride > 1) {
+    // Sample original DEM posts, before allocating mesh/blur/flow arrays.
+    // No smoothing or invented heights; physics keeps the original field.
+    const cells = hf.cells / stride, n = cells + 1;
+    const heights = new Float32Array(n * n);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) heights[j * n + i] = hf.h[j * stride * hf.verts + i * stride];
+    hf = new Heightfield(hf.size, cells, heights, hf.center);
+  }
   // Use DEM heights unchanged. Only the hidden overlap is sunk, as before.
   // No synthetic peaks, vertical exaggeration, noise displacement or smoothing.
-  const clipDetail = typeof options === 'object' && options.clipDetail;
-  const g = gridGeometry(hf, clipDetail ? null : (x, z) => (detail.inside(x, z, 20) ? -80 : 0));
+  const g = gridGeometry(hf, (x, z) => (detail.inside(x, z, 20) ? -80 : 0));
   // Where rock shows through the snow is read off the DEM's own shape: how
   // high each point stands within its own mountain (against the ground
   // about 1.5 km round it, and 500 m round, for the lesser tops and crests),
@@ -329,9 +337,7 @@ export function createBackdrop(hf, detail, options = {}) {
   }
   g.setAttribute('aRelief', new THREE.BufferAttribute(relief, 4));
   g.setAttribute('aFlow', new THREE.BufferAttribute(flowMap(soft, n), 1));
-  const mesh = new THREE.Mesh(g, mountainMaterial(clipDetail ? {
-    clipBounds: [detail.x0, detail.z0, detail.x0 + detail.size, detail.z0 + detail.size],
-  } : {}));
+  const mesh = new THREE.Mesh(g, mountainMaterial());
   mesh.name = 'dem-backdrop';
   return mesh;
 }

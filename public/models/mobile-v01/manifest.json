@@ -1,0 +1,302 @@
+{
+  "coffee-cabin/coffee-cabin.glb": {
+    "file": "mobile-v01/coffee-cabin/coffee-cabin-mobile-v01.glb",
+    "sourceSha256": "3ad5c7c7d2f4fbf50442967743ec6e789b3a13d9bed6c614a17f2fdadda0c180",
+    "sha256": "c92e2ab449da33edccae6678a66e20a76ca6b5f46193cb05a72447a03eca521e",
+    "sourceBytes": 3812828,
+    "bytes": 3683260,
+    "images": [
+      {
+        "view": 4,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "dog/old-english-sheepdog.glb": {
+    "file": "mobile-v01/dog/old-english-sheepdog-mobile-v01.glb",
+    "sourceSha256": "0302ed363a1da63cdef23a3257ee167ae441b3d413d431642d7866ec4469030f",
+    "sha256": "516d9f290fd03dcb06c2b91e44988e72369bc93b067042cefb45bc58766bb18f",
+    "sourceBytes": 1686652,
+    "bytes": 1574444,
+    "images": [
+      {
+        "view": 6,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "female-rider/board-assembly-seg-tex2k-v01.glb": {
+    "file": "mobile-v01/female-rider/board-assembly-seg-tex1k-v01-mobile-v01.glb",
+    "sourceSha256": "31c402f7d86537671f8104a89607946d3478999e844fb0224cbabfc9147301b4",
+    "sha256": "cdf8041de7fe7d07022664fb215b99c657b376ab74bef351892950a8cd74de55",
+    "sourceBytes": 1383472,
+    "bytes": 891132,
+    "images": [
+      {
+        "view": 4,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "female-rider/female-rider-rigfix-walk-run-tex2k-v03.glb": {
+    "file": "mobile-v01/female-rider/female-rider-rigfix-walk-run-tex1k-v03-mobile-v01.glb",
+    "sourceSha256": "3b0a183b0d0e80b8953a5142340347ce399990f4397f76538cdb7a9d2d8f871d",
+    "sha256": "9e0ceaa70d6907af40659deb8aa27f9284c32405f3b8273fc95e6b0b2d94ee7a",
+    "sourceBytes": 2386092,
+    "bytes": 1697408,
+    "images": [
+      {
+        "view": 6,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "female-rider/female-rider-swim-v01.glb": {
+    "file": "mobile-v01/female-rider/female-rider-swim-v01-mobile-v01.glb",
+    "sourceSha256": "0ebb2f4420fb2d00d9cbeed490a61cb20d189b2798b3a03e0aff42d758e340c9",
+    "sha256": "29abf02ef631837b5cb5a4a294b61369da6ed1b3b2e8919fe27fc4f83f598fef",
+    "sourceBytes": 2293160,
+    "bytes": 1730460,
+    "images": [
+      {
+        "view": 6,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "horse/altai-horse.glb": {
+    "file": "mobile-v01/horse/altai-horse-mobile-v01.glb",
+    "sourceSha256": "ee47a4aa73ea2b10d0f0de944067c2db27a523068fc6076b2b2ee16f0d072bd1",
+    "sha256": "da287fbb027ad8926f505fc74febfb073a829f931f620cdfe0b978d3082f6c5c",
+    "sourceBytes": 1702324,
+    "bytes": 1311560,
+    "images": [
+      {
+        "view": 6,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "jetson/jetson-one.glb": {
+    "file": "mobile-v01/jetson/jetson-one-mobile-v01.glb",
+    "sourceSha256": "9ee65b0ccd2bfdc82bd06fbebbc28943d907a688467259773fc263584110dbbb",
+    "sha256": "c4356af6241adec76a92c2a89cf3436eac5ba49ff8d829ec5777b98959d10deb",
+    "sourceBytes": 2203056,
+    "bytes": 1673248,
+    "images": [
+      {
+        "view": 4,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "lifts/station.glb": {
+    "file": "mobile-v01/lifts/station-mobile-v01.glb",
+    "sourceSha256": "c5fa5bd0d4f0c066b1c0b6a7e6b8160bfff77f83a76f43efa56ba3d0578bce42",
+    "sha256": "df30e5c407d846bb998267b05e6e51aaef13dadaa922756e241c05248609ad48",
+    "sourceBytes": 1033016,
+    "bytes": 648452,
+    "images": [
+      {
+        "view": 0,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "onsen/cave-rock.glb": {
+    "file": "mobile-v01/onsen/cave-rock-mobile-v01.glb",
+    "sourceSha256": "3fe3c4e48700e9cd8e5988c58d99eedb3083687d55b3c20bf0eea2522b3b7f55",
+    "sha256": "cf320ddf2a99662e60d02eb963376f484f0d2c9e03989e1482ad8dcf6fdf1934",
+    "sourceBytes": 979520,
+    "bytes": 450804,
+    "images": [
+      {
+        "view": 0,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "onsen/stone-arena.glb": {
+    "file": "mobile-v01/onsen/stone-arena-mobile-v01.glb",
+    "sourceSha256": "6ab2a530ca8f1115acd0c8d21602541af292d126cb72f9b1a4bb342f988c4d1b",
+    "sha256": "b75949acac32be31830973565bb91506f9ad9e133a1e3087016354f27a2f95d0",
+    "sourceBytes": 2151992,
+    "bytes": 1062588,
+    "images": [
+      {
+        "view": 4,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "player.glb": {
+    "file": "mobile-v01/player-mobile-v01.glb",
+    "sourceSha256": "be5648986a83685d2fb7c45be9885976204aad26340e4817e22bd7c797035e6c",
+    "sha256": "7f7743b5625dbd5fd8eb11d1580b303c57f3385b8c5794f835e31c5ed8f969ba",
+    "sourceBytes": 2549476,
+    "bytes": 1649732,
+    "images": [
+      {
+        "view": 6,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "prayer-wheels/prayer-wheels.glb": {
+    "file": "mobile-v01/prayer-wheels/prayer-wheels-mobile-v01.glb",
+    "sourceSha256": "cbd4f316b171eca1d899996250ff84b37f032321a67388e241540382e7c01b5f",
+    "sha256": "404958ec5c445baf63e21e1bb3edc396cc7a852a87e58efa936c654f07e1c5b1",
+    "sourceBytes": 1755128,
+    "bytes": 1134896,
+    "images": [
+      {
+        "view": 4,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "saddle/kazakh-saddle.glb": {
+    "file": "mobile-v01/saddle/kazakh-saddle-mobile-v01.glb",
+    "sourceSha256": "1e3192982d4bfb759fa7b73c833bf1d6eec11a711085c160b9a6bd48e569ec71",
+    "sha256": "03224770ac69e13914724387bb8e0526fcdb0f266ea87caf4ed81f82c86a2968",
+    "sourceBytes": 1257840,
+    "bytes": 881492,
+    "images": [
+      {
+        "view": 6,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "snowmobile/snowmobile.glb": {
+    "file": "mobile-v01/snowmobile/snowmobile-mobile-v01.glb",
+    "sourceSha256": "34ff826815f885d3c17b42aee14a7a1b902917b0d0a2bd2c2d11366ca6ada45c",
+    "sha256": "c11c5ea331ce43d3cc19ee7ccce0c36c3431125f87d89535f13ea8d18baac74d",
+    "sourceBytes": 1978420,
+    "bytes": 1453368,
+    "images": [
+      {
+        "view": 0,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  },
+  "truck/pickup.glb": {
+    "file": "mobile-v01/truck/pickup-mobile-v01.glb",
+    "sourceSha256": "e79c6eb212f8b57d4124c527bfa3fe2b02d2c70d526dcc9daada6554c8857276",
+    "sha256": "65cb7587a0396f7463c10543547da4c0029bd3ecea177074dfdf1ec875a568c9",
+    "sourceBytes": 3624744,
+    "bytes": 2916976,
+    "images": [
+      {
+        "view": 4,
+        "before": [
+          2048,
+          2048
+        ],
+        "after": [
+          1024,
+          1024
+        ]
+      }
+    ]
+  }
+}

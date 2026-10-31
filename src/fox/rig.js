@@ -9,13 +9,13 @@
 // along its edge. Each eye is found by the mesh's rest position, so the lid
 // stays on it however the head moves.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from '../render/model-loader.js';
 import { DogRig } from '../dog/rig.js';
 
 const FILE = import.meta.env.BASE_URL + 'models/fox/red-fox.glb';
 let loading = null;
 export function loadFox() {
-  loading ||= new GLTFLoader().loadAsync(FILE).catch((err) => { loading = null; throw err; });
+  loading ||= loadModel(FILE).catch((err) => { loading = null; throw err; });
   return loading;
 }
 

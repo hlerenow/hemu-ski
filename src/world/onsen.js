@@ -11,7 +11,7 @@
 // the ring, which faces `faceTo`, the cave rock out to +x, its spout pouring
 // back toward -x. You soak on the -x side, facing the spout.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from '../render/model-loader.js';
 import { makeToon, toonUniforms } from '../render/toon.js';
 
 const DIR = import.meta.env.BASE_URL + 'models/onsen/';
@@ -129,7 +129,7 @@ export function createOnsen(hf, { x, z, faceTo }) {
   onsen.exit = { x: exit.x, z: exit.z, dx: out.x, dz: out.z };
   setSeat(onsen, toWorld(-1.6, 0), along(1, 0));
 
-  onsen.ready = Promise.all(['stone-arena', 'cave-rock'].map((n) => new GLTFLoader().loadAsync(`${DIR}${n}.glb`)))
+  onsen.ready = Promise.all(['stone-arena', 'cave-rock'].map((n) => loadModel(`${DIR}${n}.glb`)))
     .then(([ring, rock]) => {
       const ringGeo = placed(ring, [RING, RING_TALL, RING]);
       group.add(rocky(ringGeo));

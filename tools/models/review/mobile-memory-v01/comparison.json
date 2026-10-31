@@ -1,0 +1,36 @@
+{
+  "desktop": {
+    "geometryArrayBytes": 166532172,
+    "imageCount": 55,
+    "imageRGBABytesEstimate": 231346176,
+    "loads": {
+      "active": 0,
+      "completed": 20,
+      "failed": 0,
+      "peak": 18
+    },
+    "nearTreeCapacity": 2048,
+    "nearTreeCount": 0,
+    "nonFinitePositions": 0,
+    "profile": "desktop",
+    "state": "intro",
+    "rider": "male"
+  },
+  "mobile": {
+    "geometryArrayBytes": 115488172,
+    "imageCount": 55,
+    "imageRGBABytesEstimate": 80351232,
+    "loads": {
+      "active": 0,
+      "completed": 20,
+      "failed": 0,
+      "peak": 2
+    },
+    "nearTreeCapacity": 4096,
+    "nearTreeCount": 0,
+    "nonFinitePositions": 0,
+    "profile": "mobile",
+    "state": "intro",
+    "rider": "male"
+  }
+}

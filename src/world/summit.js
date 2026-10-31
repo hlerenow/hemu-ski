@@ -9,7 +9,7 @@
 // walls), so the frame's opening, the swing's middle and the space under the
 // pods stay open.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel } from '../render/model-loader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeToon } from '../render/toon.js';
 import { placeOf, summitFrame } from './data.js';
@@ -268,7 +268,7 @@ function signpost() {
 const WHEELS = { scale: 5.5, posts: 0.448, depth: 0.027, top: 0.526 };
 let wheelsModel = null;
 function loadWheels() {
-  wheelsModel ??= new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/prayer-wheels/prayer-wheels.glb`).then((gltf) => {
+  wheelsModel ??= loadModel(`${import.meta.env.BASE_URL}models/prayer-wheels/prayer-wheels.glb`).then((gltf) => {
     const model = gltf.scene;
     const toonOf = new Map(); // the wheels gilded, with a rim of light
     model.traverse((o) => {
@@ -475,7 +475,7 @@ function cabin() {
   const solids = CABIN_SOLIDS.map((b) => Array.isArray(b)
     ? { x: ((b[0] + b[1]) / 2) * S, z: ((b[2] + b[3]) / 2) * S, hw: ((b[1] - b[0]) / 2) * S, hd: ((b[3] - b[2]) / 2) * S, top: up(b[4]) }
     : { x: b.at[0] * S, z: b.at[1] * S, yaw: b.yaw, hw: b.hw * S, hd: b.hd * S, top: up(b.top) });
-  g.userData.ready = new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/coffee-cabin/coffee-cabin.glb`).then((gltf) => {
+  g.userData.ready = loadModel(`${import.meta.env.BASE_URL}models/coffee-cabin/coffee-cabin.glb`).then((gltf) => {
     const model = gltf.scene;
     model.scale.setScalar(S);
     model.position.y = -cabinSink();
