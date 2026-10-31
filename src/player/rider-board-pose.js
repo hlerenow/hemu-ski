@@ -50,15 +50,15 @@ export class BoardPose {
       rRoll: -0.85 - carve * 0.3 + tuck * 0.72 + flight * 0.15,
       rElbow: -0.65 - tuck * 0.85 - flight * 0.3,
     });
-    // Toe edge: extend through the hips with a pronounced back arch. Heel edge:
-    // the left fingertips may brush snow; the right arm stays bent up/back.
-    const tall = { py: 0.74 + breath, pz: edge < 0 ? 0.015 : -0.015,
-      pPitch: edge < 0 ? -0.06 * TOE_ARCH : 0.025, pRoll: 0,
-      tPitch: edge < 0 ? -0.16 * TOE_ARCH - 0.12 : 0.04, tYaw: 0.12, tRoll: 0,
+    // Toe edge keeps the back arch. Heel contact uses the reference's flexed
+    // knees, low left shoulder and relaxed right arm opened up behind it.
+    const tall = { py: 0.74 + breath, pz: edge < 0 ? 0.015 : -0.045,
+      pPitch: edge < 0 ? -0.06 * TOE_ARCH : 0.12, pRoll: 0,
+      tPitch: edge < 0 ? -0.16 * TOE_ARCH - 0.12 : 0.22, tYaw: 0.12, tRoll: edge < 0 ? 0 : -0.18,
       hPitch: -0.08, kneeOut: 0.1, kneeShift: 0,
-      legExtension: edge < 0 ? 0.9 : 0.96, crouch: 0.14 };
+      legExtension: edge < 0 ? 0.9 : 0.86, crouch: 0.14 };
     for (const [key, target] of Object.entries(tall)) x[key] += (target - x[key]) * deep;
-    if (edge > 0) for (const [key, target] of Object.entries({rPitch: -0.85, rRoll: -1.85, rElbow: -1.35})) {
+    if (edge > 0) for (const [key, target] of Object.entries({rPitch: -0.35, rRoll: -1.3, rElbow: -0.55})) {
       x[key] += (target - x[key]) * deep;
     }
     return x;

@@ -635,7 +635,10 @@ export class Rider {
       const shoulder = this.model?.bones.LeftArm.bone || this.armL.sh;
       shoulder.getWorldPosition(this.snowTouch.target);
       const target = this.snowTouch.target;
-      target.y = hf.heightAt(target.x, target.z) + (this.model ? 0.035 : 0.075);
+      const inside = new THREE.Vector3(0,1,0).applyQuaternion(this.body.getWorldQuaternion(new THREE.Quaternion()));
+      inside.y = 0;
+      target.addScaledVector(inside.normalize(), 0.18);
+      target.y = hf.heightAt(target.x, target.z) + (this.model ? 0.015 : 0.075);
       if (this.model) {
         const normal = hf.normalAt ? hf.normalAt(target.x, target.z, new THREE.Vector3()) : new THREE.Vector3(0, 1, 0);
         this.model.touchSnowTip(target, normal, this.snowTouch.weight, 'Left');
