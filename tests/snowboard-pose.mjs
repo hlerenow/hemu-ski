@@ -22,7 +22,26 @@ assert(snow.tPitch < -0.1 && snow.pPitch < 0, 'toe carve extends and arches back
 assert(back.rRoll < -1 && Math.abs(back.rElbow) < 0.8 && back.tRoll < 0, 'heel contact opens the relaxed right arm and lowers the left shoulder');
 assert(pose({lean:1,carve:true,air:true}).touch === 0, 'snow contact is disabled in flight');
 const switchEdge = new BoardPose(); switchEdge.update(0,{...idle,lean:1,carve:true});
-assert(switchEdge.update(1/60,{...idle,lean:-1,carve:true}).touch === 0, 'switching onto toe edge immediately releases snow contact');
+for (let i = 0; i < 60; i++) {
+  const x = switchEdge.update(1/60,{...idle,lean:-1,carve:true});
+  if (x.edge <= 0) assert.equal(x.touch,0,'snow contact is released before the toe edge is loaded');
+}
+for (const fps of [30,60,144]) for (const from of [-1,1]) {
+  const p = new BoardPose();
+  let previous = {...p.update(0,{...idle,lean:from,carve:true})};
+  let peak = 0;
+  for (let i = 0; i < fps * 2; i++) {
+    // Include repeated reversals before the previous pose has settled.
+    const lean = (Math.floor(i / (fps / 4)) % 2 ? from : -from);
+    const x = p.update(1/fps,{...idle,lean,carve:true});
+    for (const key of ['pPitch','tPitch','tRoll','rPitch','rRoll','rElbow']) {
+      peak = Math.max(peak,Math.abs(x[key]-previous[key])*fps);
+      assert(Math.abs(x[key]-previous[key]) < 12/fps, `${key} cannot snap when changing edges at ${fps} fps`);
+    }
+    previous = {...x};
+  }
+  console.log(`PASS ${fps} fps carve reversals from ${from}: peak pose speed ${peak.toFixed(2)} rad/s`);
+}
 const transition = fps => {
   const p = new BoardPose(); p.update(0, idle);
   for (let i=0; i<fps; i++) p.update(1/fps, { ...idle, lean: 0.8, carve: true, tuck: true });

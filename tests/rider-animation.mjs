@@ -277,6 +277,10 @@ try {
     const handQ = subject.bones.LeftHand.bone.quaternion.clone();
     assert.equal(subject.touchSnowTip(wrist.clone().add(new THREE.Vector3(0,-1,0)),new THREE.Vector3(0,1,0),1,'Left'),false, `${label} unreachable snow never pulls the arm down`);
     assert(subject.bones.LeftHand.bone.quaternion.equals(handQ), `${label} unreachable snow leaves the wrist alone`);
+    const limitTarget = wrist.clone().add(new THREE.Vector3(0,-length-0.0249,0));
+    subject.touchSnowTip(limitTarget,new THREE.Vector3(0,1,0),1,'Left');
+    assert(subject.bones.LeftHand.bone.quaternion.clone().normalize().angleTo(handQ.clone().normalize()) < 0.001, `${label} fingertip contact fades in at the reach limit without a wrist snap`);
+    subject.bones.LeftHand.bone.quaternion.copy(handQ); subject.root.updateMatrixWorld(true);
     const target = wrist.clone().add(new THREE.Vector3(0,-length,0));
     assert(subject.touchSnowTip(target,new THREE.Vector3(0,1,0),1,'Left'), `${label} reachable snow gets fingertip-only contact`);
     const tip = subject.fingerTips.Left.getWorldPosition(new THREE.Vector3());

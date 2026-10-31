@@ -1,10 +1,12 @@
 // Board frame: body +z points over the toes. Negative edge roll inclines
 // toward the toe edge; Shift deepens the turn while keeping the spine tall.
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const smooth = v => v * v * (3 - 2 * v);
+const mix = (a, b, t) => a + (b - a) * t;
 const TOE_ARCH = 4; // Multiplier of the original hip/spine back-arch angles.
 export class BoardPose {
   constructor() {
-    this.state = { edge: 0, deep: 0, tuck: 0, compression: 0, air: 0, grab: 0, touch: 0, twist: 0 };
+    this.state = { edge: 0, deep: 0, heelPose: 0.5, tuck: 0, compression: 0, air: 0, grab: 0, touch: 0, twist: 0 };
     this.snap = true;
     this.x = {};
   }
@@ -18,23 +20,27 @@ export class BoardPose {
     const targets = {
       edge: air ? 0 : lean * speed * (0.35 + deepTarget * (lean > 0 ? 0.7 : 0.95)),
       deep: deepTarget, touch: touchTarget,
+      heelPose: smooth(clamp((lean + 0.4) / 0.8)),
       tuck: s.tuck && !air && !s.brake ? 1 : 0,
       compression: Math.max(s.charge || 0, clamp((s.landing || 0) / 0.6), s.brake ? 0.5 : 0),
       air: air ? 1 : 0, grab: air && s.grab ? 1 : 0,
       twist: clamp(s.twist || 0, -1, 1),
     };
     for (const key of Object.keys(targets)) {
-      const rate = key === 'edge' ? 9 : key === 'compression' ? 16 : 10;
+      const rate = key === 'edge' ? 9 : key === 'heelPose' ? 7 : key === 'compression' ? 16 : 10;
       this.state[key] = this.snap ? targets[key] : this.state[key] + (targets[key] - this.state[key]) * (1 - Math.exp(-Math.max(0, dt) * rate));
     }
     this.snap = false;
     const { edge, deep, tuck, compression, air: flight, grab, touch, twist } = this.state;
+    // Crossfade the complete carve pose independently of the edge's sign.
+    // A sign branch here used to jump the spine by ~100 degrees in one frame.
+    const heelBlend = smooth(this.state.heelPose);
     const carve = Math.abs(edge), heel = Math.max(0, edge), toe = Math.max(0, -edge);
     const crouch = clamp(0.08 + heel * 0.25 + toe * 0.2 + tuck * 0.65 + compression * 0.78 + flight * 0.3 + grab * 0.45);
     const breath = Math.sin(time * 2.5) * 0.006 * (1 - tuck) * (1 - flight);
     const x = this.x;
     Object.assign(x, {
-      edge, deep, crouch, grab, touch: edge > 0 && lean > 0.55 ? touch : 0,
+      edge, deep, crouch, grab, touch: touch * smooth(clamp(edge / 0.3)),
       px: 0.02 + twist * 0.055, py: 0.78 - crouch * 0.26 - grab * 0.12 + breath,
       pz: -0.055 - crouch * 0.08 - heel * 0.06 + toe * 0.055,
       pPitch: toe * 0.1, pYaw: 0.22 + twist * 0.22, pRoll: -twist * 0.09,
@@ -52,14 +58,14 @@ export class BoardPose {
     });
     // Toe edge keeps the back arch. Heel contact uses the reference's flexed
     // knees, low left shoulder and relaxed right arm opened up behind it.
-    const tall = { py: 0.74 + breath, pz: edge < 0 ? 0.015 : -0.045,
-      pPitch: edge < 0 ? -0.06 * TOE_ARCH : 0.18, pRoll: 0,
-      tPitch: edge < 0 ? -0.16 * TOE_ARCH - 0.12 : 1.05, tYaw: 0.12, tRoll: edge < 0 ? 0 : -0.85,
+    const tall = { py: 0.74 + breath, pz: mix(0.015, -0.045, heelBlend),
+      pPitch: mix(-0.06 * TOE_ARCH, 0.18, heelBlend), pRoll: 0,
+      tPitch: mix(-0.16 * TOE_ARCH - 0.12, 1.05, heelBlend), tYaw: 0.12, tRoll: mix(0, -0.85, heelBlend),
       hPitch: -0.08, kneeOut: 0.1, kneeShift: 0,
-      legExtension: edge < 0 ? 0.9 : 0.86, crouch: 0.14 };
+      legExtension: mix(0.9, 0.86, heelBlend), crouch: 0.14 };
     for (const [key, target] of Object.entries(tall)) x[key] += (target - x[key]) * deep;
-    if (edge > 0) for (const [key, target] of Object.entries({rPitch: -0.35, rRoll: -1.3, rElbow: -0.55})) {
-      x[key] += (target - x[key]) * deep;
+    for (const [key, target] of Object.entries({rPitch: -0.35, rRoll: -1.3, rElbow: -0.55})) {
+      x[key] += (target - x[key]) * deep * heelBlend;
     }
     return x;
   }

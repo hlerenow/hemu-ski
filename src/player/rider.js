@@ -637,8 +637,7 @@ export class Rider {
       const target = this.snowTouch.target;
       target.y = hf.heightAt(target.x, target.z) + 0.015;
       const normal = hf.normalAt ? hf.normalAt(target.x, target.z, new THREE.Vector3()) : new THREE.Vector3(0, 1, 0);
-      this.model.touchSnowTip(target, normal, this.snowTouch.weight, 'Left');
-      clearGround(this.root, hf);
+      if (this.model.touchSnowTip(target, normal, this.snowTouch.weight, 'Left')) clearGround(this.root, hf);
     }
     return lift;
   }
@@ -659,7 +658,7 @@ export class Rider {
     L.el.rotation.set(x.lElbow, 0, 0.1);
     R.sh.rotation.set(x.rPitch, 0, x.rRoll);
     R.el.rotation.set(x.rElbow, 0, -0.1);
-    this.snowTouch.weight = s.carve && !s.air && !s.fall && this.locomotion === 'ride' ? x.touch : 0;
+    this.snowTouch.weight = !s.air && !s.fall && this.locomotion === 'ride' ? x.touch : 0;
     this.boardGrab.weight = s.fall ? 0 : x.grab;
     if (x.grab > 0.001) {
       // Trailing hand reaches the toe edge between the bindings.
