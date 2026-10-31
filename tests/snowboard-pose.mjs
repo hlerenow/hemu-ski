@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createServer } from 'vite';
 import { BoardPose } from '../src/player/rider-board-pose.js';
-import { firstPersonTarget } from '../src/player/ride-camera.js';
 
 const idle = { speed: 14, lean: 0, twist: 0, crouch: 0.35 };
 const pose = s => new BoardPose().update(0, { ...idle, ...s });
@@ -48,18 +47,6 @@ const transition = fps => {
   return { ...p.x };
 };
 for (const key of Object.keys(transition(30))) assert(Math.abs(transition(30)[key]-transition(144)[key]) < 1e-8, `frame independent ${key}`);
-const pos = new THREE.Vector3(), look = new THREE.Vector3();
-firstPersonTarget({position: new THREE.Vector3(10, 20, 30), forward: new THREE.Vector3(0,0,-1), crouch: 1, pitch: 0.5}, pos, look);
-assert(pos.y > 21 && pos.y < 21.2 && look.y < pos.y, 'eye height follows crouch and looks down');
-assert(Math.abs(look.x-pos.x) < 1e-8 && look.z < pos.z, 'first person looks along travel');
-const socket = new THREE.Vector3(2, 0.6, -1);
-firstPersonTarget({eye: socket, forward: new THREE.Vector3(0,0,-1)}, pos, look);
-assert(pos.equals(socket), 'first person uses the actual head socket even during low carves');
-assert(look.y < pos.y && look.z < pos.z, 'default view includes the slope and board below the horizon');
-const flatGaze = look.clone().sub(pos).normalize();
-firstPersonTarget({eye: socket, forward: new THREE.Vector3(0,0,-1), normal: new THREE.Vector3(0,1,-0.5).normalize()}, pos, look);
-assert(pos.equals(socket) && look.clone().sub(pos).normalize().y < flatGaze.y, 'downhill gaze follows the slope without moving the head mount');
-
 // Exercise the actual articulated rider, not just its pose targets. Canvas
 // painting is irrelevant to joint transforms, so leave it out in Node.
 const originalDocument = globalThis.document;
@@ -69,13 +56,6 @@ try {
   const {Rider} = await server.ssrLoadModule('/src/player/rider.js');
   const rider = new Rider();
   rider.update(0,idle);
-  const uprightEye = rider.eyePosition(new THREE.Vector3(),new THREE.Vector3(0,0,-1));
-  for (let i = 0; i < 90; i++) rider.update(1/60,{...idle,tuck:true});
-  const lowEye = rider.eyePosition(new THREE.Vector3(),new THREE.Vector3(0,0,-1));
-  assert(lowEye.y < uprightEye.y - 0.1, 'eye is attached to the posed head rather than a fixed world height');
-  rider.firstPersonBody(true);
-  assert(!rider.head.visible && rider.classic.visible, 'first person hides the head while retaining arms/body');
-  rider.firstPersonBody(false);
   const fixed = rider.feet.map(f=>f.position.clone());
   for (const state of [{}, {tuck:true}, {lean:1,twist:0.5,carve:true}, {lean:-1,twist:-0.5,carve:true,snowTouch:true}, {charge:1}, {air:true}, {air:true,grab:true}, {landing:0.6}]) {
     for (let i=0;i<90;i++) rider.update(1/60,{...idle,...state});
@@ -98,5 +78,5 @@ try {
   spineUp.addScaledVector(gaze,-spineUp.dot(gaze)).normalize();
   assert(headUp.dot(spineUp) > 0.98, 'head keeps the spine inclination while looking along travel');
   console.log('PASS Shift-only tall toe/heel carves, left-hand heel contact, raised right arm and forward gaze');
-  console.log('PASS snowboard upright/tuck, heel/toe carve, neutral air, grab, landing, fixed bindings and first-person targets');
+  console.log('PASS snowboard upright/tuck, heel/toe carve, neutral air, grab, landing and fixed bindings');
 } finally { globalThis.document = originalDocument; await server.close(); }

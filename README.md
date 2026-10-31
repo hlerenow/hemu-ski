@@ -336,7 +336,6 @@ pickup and the snowmobile by the East Service Centre.
 | Space | hold and release for a neutral ollie; A / D spin in the air |
 | Shift (airborne) | grab the toe edge of the board |
 | X (airborne) | deliberately start a front flip; release to finish the current rotation |
-| V | toggle first-person / third-person camera; also available beside the map selector |
 | E | board a lift within 10 m of its bottom station (Space skips the ride); get in or out of the pickup, the Jetson ONE or the rowing boat, or on or off the snowmobile, beside it; get in or out of the hot spring; pet the dog beside it; turn a prayer wheel beside it |
 | Q | throw a snowball for the dog |
 | In the hot spring | A / D look around, E get out |
@@ -613,12 +612,11 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
 
 Data © OpenStreetMap contributors (ODbL). Elevation: Mapzen / AWS Terrain Tiles.
 
-### 单板姿态与第一视角
+### 单板姿态
 
 单板现在分别表现直立滑行、前后刃刻滑、俯身加速、蓄力、收腿平跳、抓板和落地缓冲。
 普通 A / D 只做换刃；按住 Shift 加 A / D 才做深刻滑，前后刃的转向角速度均为普通滑行的两倍。后刃刻滑采用屈膝、折髋前屈的姿态，上身保持抬起；前手保留自然弯曲，仅在够得到雪面时转动手腕、让指尖轻擦，手掌不撑地，右臂自然展开并微屈。前刃刻滑不摸雪，髋部和上身伸展并明显反弓。头部随身体倾斜并看向前方。
 空格蓄力后松开可保持平跳；空中按 A / D 转体，Shift 抓板，X 主动空翻。
-V 或地图旁的按钮切换第一 / 第三视角；第一视角位于人物头部，随姿态移动，画面保留手臂和雪板，默认视线略向下并适应坡度，也可拖动鼠标环顾。
 触屏离地后会出现抓板和空翻按钮。
 
 开发预览：`/tools/review/snowboard.html`，可选择男女滑手与经典人物，比较各个姿态的过渡。

@@ -148,23 +148,6 @@ function boardGeometry() {
 }
 
 export class Rider {
-  // Head socket plus the eye's offset, measured in metres for either rig.
-  eyePosition(out, forward) {
-    this.root.updateMatrixWorld(true);
-    const bone = this.model?.bones.Head;
-    const head = bone?.bone || this.head;
-    const frame = head.getWorldQuaternion(new THREE.Quaternion());
-    if (bone) frame.multiply(bone.modelQ.clone().invert());
-    head.getWorldPosition(out);
-    out.addScaledVector(new THREE.Vector3(0, 1, 0).applyQuaternion(frame), bone ? 0.12 : 0.2);
-    return out.addScaledVector(forward, 0.1);
-  }
-
-  firstPersonBody(enabled) {
-    this.head.visible = !enabled;
-    if (this.model) this.model.firstPersonMask.value = enabled ? 1 : 0;
-  }
-
   // `model: true` swaps the primitive body for the rigged Tripo character once
   // public/models/player.glb has loaded; the primitive one stays as the fallback.
   constructor({ model = false } = {}) {
@@ -225,6 +208,7 @@ export class Rider {
     this.act = null; // in 'act': { clip, time }, see play()
     this.models = new Map();
     this.outfits = new Map(); // 'id:outfit' → { promise, model }
+    this.modelTransition = null;
     this.selection = 0;
     if (model) this.selectModel(model === true ? 'male' : model).catch((err) => console.warn('Rider model unavailable.', err));
   }
@@ -251,15 +235,52 @@ export class Rider {
     }
     if (selection !== this.selection) return false;
     if (this.locomotion !== 'sit') this.setLocomotion('ride'); // a seated rider stays on the seat
-    if (this.model) this.body.remove(this.model.root);
+    this.#finishModelTransition();
+    const previous = this.model || (this.classic.visible ? { root: this.classic, classic: true } : null);
     this.model = this.base = model;
     this.outfit = null;
     this.modelId = id;
     if (model) this.body.add(model.root);
+    if (previous && model && previous !== model) {
+      const state = new Map();
+      this.#setModelOpacity(previous, 1, state);
+      this.#setModelOpacity(model, 0, state);
+      this.modelTransition = { previous, state, elapsed: 0 };
+    } else if (previous && !model && previous !== this.classic) {
+      const state = new Map();
+      this.#setModelOpacity(previous, 1, state);
+      this.#setModelOpacity(this.classic, 0, state);
+      this.modelTransition = { previous, state, elapsed: 0 };
+    }
+    if (previous?.classic) this.classic.visible = true;
     this.classic.visible = !model;
     for (const m of this.boots) m.visible = !model;
     this.#gearVisibility();
     return true;
+  }
+
+  #setModelOpacity(model, opacity, state) {
+    const root = model.root ?? model;
+    root.traverse((object) => {
+      if (!object.isMesh) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const material of materials) {
+        if (!material) continue;
+        if (!state.has(material)) state.set(material, { transparent: material.transparent, opacity: material.opacity, depthWrite: material.depthWrite });
+        material.transparent = true;
+        material.opacity = opacity;
+        material.depthWrite = false;
+      }
+    });
+  }
+
+  #finishModelTransition() {
+    const transition = this.modelTransition;
+    if (!transition) return;
+    if (!transition.previous.classic) this.body.remove(transition.previous.root);
+    for (const [material, original] of transition.state) Object.assign(material, original);
+    this.classic.visible = !this.model;
+    this.modelTransition = null;
   }
 
   // The build for sitting (see CLASSIC_BUILD): the rigged rider's, or the classic one's.
@@ -529,6 +550,14 @@ export class Rider {
 
   update(dt, s) {
     this.t += dt;
+    if (this.modelTransition) {
+      const transition = this.modelTransition;
+      transition.elapsed += dt;
+      const t = THREE.MathUtils.smoothstep(Math.min(transition.elapsed / 0.28, 1), 0, 1);
+      this.#setModelOpacity(transition.previous, 1 - t, transition.state);
+      this.#setModelOpacity(this.model, t, transition.state);
+      if (t >= 1) this.#finishModelTransition();
+    }
     const p = this.pose;
     this.boardGrab.weight = 0;
     this.snowTouch.weight = 0;

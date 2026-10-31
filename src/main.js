@@ -348,7 +348,6 @@ window.addEventListener('keydown', (e) => {
 // What a key press does, beyond the key being held. The touch buttons, the
 // prompt and the menu press keys through here too, so a tap does what the key does.
 function act(code, repeat = false) {
-  if (code === 'KeyV' && !repeat) { toggleView(); return; }
   if ((code === 'Enter' || code === 'Space') && state === 'title') { begin(); return; }
   if ((code === 'Enter' || code === 'Space' || code === 'Escape') && state === 'swoop') { swoop.t = 1; return; }
   if ((code === 'Enter' || code === 'Space' || code === 'Escape') && state === 'arrive') { arrival.t = 1; return; }
@@ -588,23 +587,6 @@ window.addEventListener('pagehide', saveWeather);
 // driving or soaking takes the pointer and the mouse swings the camera round
 // you. Remembered between visits.
 const mouseLook = new MouseLook(canvas);
-const viewButton = document.getElementById('view-toggle');
-function updateViewButton() {
-  viewButton.textContent = firstPerson ? '切到第三视角 V' : '切到第一视角 V';
-  viewButton.setAttribute('aria-pressed', String(firstPerson));
-}
-function toggleView() {
-  firstPerson = !firstPerson;
-  const url = new URL(location.href);
-  if (firstPerson) url.searchParams.set('view', 'first'); else url.searchParams.delete('view');
-  history.replaceState(null, '', url);
-  if (!firstPerson && !mouseLook.on) mouseLook.set(false);
-  mouseLook.reset();
-  if (state === 'ride') { mouseLook.force = firstPerson; snapCamera(); }
-  updateViewButton();
-}
-viewButton.addEventListener('click', () => { toggleView(); viewButton.blur(); });
-updateViewButton();
 mouseLook.wanted = () => state === 'ride' || state === 'drive' || state === 'horse' || state === 'soak' || state === 'lift';
 {
   const box = document.getElementById('set-mouselook');
@@ -733,7 +715,6 @@ const introPanel = () => showPanel('Hemu · 禾木', `
 // ---------- Camera ----------
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _look = new THREE.Vector3();
 const camLook = new THREE.Vector3();
-const eye = new THREE.Vector3();
 // How far the screen is toward a phone held upright: 0 when it's square or
 // wider, 1 at 9:19.5. A tall, narrow view sees little of the slope either side,
 // so as this grows the cameras pull back, rise, look further ahead and widen
@@ -745,11 +726,6 @@ const portrait = () => THREE.MathUtils.clamp((1 - camera.aspect) / 0.54, 0, 1);
 let indoors = 0;
 const INDOORS = { dist: 2.4, up: 0.55, ahead: 1.6, look: 0.35 };
 function cameraTarget(out, look) {
-  if (firstPerson && state === 'ride' && phys.crashed <= 0) {
-    firstPersonTarget({ eye: rider.eyePosition(eye, camDir), forward: camDir, normal: phys.normal, yaw: mouseLook.yaw, pitch: mouseLook.pitch }, out, look);
-    out.y = Math.max(out.y, detail.heightAt(out.x, out.z) + 0.12);
-    return;
-  }
   const sp = phys.speed, p = portrait(), k = indoors;
   const d = THREE.MathUtils.lerp(4.6 + p * 3.4 + Math.min(sp, 30) * 0.07, INDOORS.dist, k);
   out.copy(phys.pos).addScaledVector(camDir, -d);
@@ -925,7 +901,6 @@ if (new URLSearchParams(location.search).has('notitle')) {
 }
 
 function updateRideCamera(dt) {
-  mouseLook.force = firstPerson || false;
   const sp = phys.speed;
   _v.copy(phys.vel).setY(0);
   if (rider.locomotion === 'walk') {
@@ -936,15 +911,6 @@ function updateRideCamera(dt) {
     camDir.lerp(_v, 1 - Math.exp(-dt * 2.2)).normalize();
   }
   indoors += (roomAt(phys.pos.x, phys.pos.z) - indoors) * (1 - Math.exp(-dt * 2.5));
-  if (firstPerson && phys.crashed <= 0) {
-    mouseLook.take();
-    cameraTarget(camera.position, camLook);
-    camera.lookAt(camLook);
-    camera.fov = 88 + Math.min(sp, 30) * 0.1;
-    camera.near = 0.04;
-    camera.updateProjectionMatrix();
-    return;
-  }
   swingCamera(ridePivot(_pv));
   cameraTarget(_w, _look);
   camera.position.lerp(_w, 1 - Math.exp(-dt * (6 + indoors * 3)));
@@ -1225,9 +1191,7 @@ function frame() {
   updateWeatherPanel();
 
   // Normal-edge lines fade out by ~600 m, so far geometry can skip that pass.
-  rider.firstPersonBody(firstPerson && state === 'ride' && phys.crashed <= 0);
   post.render(scene, camera, time, [sky, weather.snowfall.points, spray.points, dog.spray.points, ...(foxes ? [foxes.spray.points] : []), ...(horse ? horse.sprays : []), specks.points, backdrop, ripples.group, ...forest.farMeshes, ...marks.hidden]);
-  rider.firstPersonBody(false);
   requestAnimationFrame(frame);
 }
 
