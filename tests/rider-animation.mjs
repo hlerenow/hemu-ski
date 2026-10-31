@@ -253,7 +253,7 @@ try {
   for (const [label, subject] of [['female', model], ['male', male]]) {
     const pose = new BoardPose().update(0,{carve:true,lean:1,snowTouch:true,speed:16});
     const b = subject.build;
-    rider.hips.position.set(pose.px, b.leg*0.96+b.ankle+b.hip[1], pose.pz);
+    rider.hips.position.set(pose.px, b.leg*pose.legExtension+b.ankle+b.hip[1], pose.pz);
     rider.hips.rotation.set(pose.pPitch,pose.pYaw,pose.pRoll);
     rider.torso.rotation.set(pose.tPitch,pose.tYaw,pose.tRoll);
     const edge = new THREE.Group(), body = new THREE.Group();
@@ -269,7 +269,8 @@ try {
     const oriented = subject.bones.Head.bone.getWorldQuaternion(new THREE.Quaternion()).multiply(subject.bones.Head.modelQ.clone().invert());
     assert(new THREE.Vector3(0,1,0).applyQuaternion(oriented).dot(up) > 0.99, `${label} head follows body inclination`);
     const raised = ['RightArm','RightForeArm','RightHand'].map(n=>subject.bones[n].bone.quaternion.clone());
-    const target = subject.bones.LeftArm.bone.getWorldPosition(new THREE.Vector3()); target.y = 0.035;
+    const target = subject.bones.LeftArm.bone.getWorldPosition(new THREE.Vector3());
+    target.addScaledVector(up.clone().setY(0).normalize(),0.18); target.y = 0.015;
     subject.touchSnowTip(target,new THREE.Vector3(0,1,0),1,'Left');
     const tip = subject.fingerTips.Left.getWorldPosition(new THREE.Vector3());
     const palm = subject.palmAt('Left',new THREE.Vector3());

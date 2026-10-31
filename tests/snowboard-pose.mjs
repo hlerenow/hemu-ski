@@ -16,10 +16,10 @@ assert(pose({ air: true, grab: true }).py < pose({ air: true }).py - 0.08, 'grab
 const ordinary = pose({lean:-1}), snow = pose({lean:-1,carve:true,snowTouch:true}), back = pose({lean:1,carve:true});
 assert(Math.abs(ordinary.edge) <= 0.35 && ordinary.touch === 0, 'normal edge changes never deep-carve or touch without Shift');
 assert(snow.edge < -1.2 && back.edge > 1.2, 'deep carves mirror whole-body inclination');
-assert(snow.py > 0.72 && back.py > 0.72 && snow.tPitch < 0.12 && back.tPitch < 0.12, 'both edges keep legs extended and spine tall');
+assert(snow.py > 0.72 && back.py > 0.72 && snow.tPitch < 0.12 && back.tPitch > 0.15, 'toe arches back while heel contact inclines the torso');
 assert(snow.touch === 0 && back.touch > 0.9, 'only heel carving requests snow contact');
 assert(snow.tPitch < -0.1 && snow.pPitch < 0, 'toe carve extends and arches back instead of folding forward');
-assert(back.rRoll < -1.7 && back.rElbow < -1.2, 'heel carve lifts the bent right arm');
+assert(back.rRoll < -1 && Math.abs(back.rElbow) < 0.8 && back.tRoll < 0, 'heel contact opens the relaxed right arm and lowers the left shoulder');
 assert(pose({lean:1,carve:true,air:true}).touch === 0, 'snow contact is disabled in flight');
 const switchEdge = new BoardPose(); switchEdge.update(0,{...idle,lean:1,carve:true});
 assert(switchEdge.update(1/60,{...idle,lean:-1,carve:true}).touch === 0, 'switching onto toe edge immediately releases snow contact');
@@ -75,7 +75,8 @@ try {
   assert(gaze.dot(new THREE.Vector3(0,0,-1)) > 0.99, 'head looks forward');
   const headUp = new THREE.Vector3(0,1,0).applyQuaternion(rider.head.getWorldQuaternion(new THREE.Quaternion()));
   const spineUp = new THREE.Vector3(0,1,0).applyQuaternion(rider.torso.getWorldQuaternion(new THREE.Quaternion()));
-  assert(headUp.dot(spineUp) > 0.98, 'head inclines with the spine instead of standing vertically');
+  spineUp.addScaledVector(gaze,-spineUp.dot(gaze)).normalize();
+  assert(headUp.dot(spineUp) > 0.98, 'head keeps the spine inclination while looking along travel');
   console.log('PASS Shift-only tall toe/heel carves, left-hand heel contact, raised right arm and forward gaze');
   console.log('PASS snowboard upright/tuck, heel/toe carve, neutral air, grab, landing, fixed bindings and first-person targets');
 } finally { globalThis.document = originalDocument; await server.close(); }
