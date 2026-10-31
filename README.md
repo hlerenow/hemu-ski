@@ -1,5 +1,11 @@
 # Hemu Ski
 
+> **Copyright © 2026 eric1hua. All rights reserved — this is proprietary
+> software, not open source.** See [LICENSE](LICENSE): no copying,
+> modification, redistribution or commercial use without prior written
+> permission. Third-party components (three.js, elevation and map data)
+> remain under their own licenses, as listed in the LICENSE file.
+
 A small Three.js snowboarding experiment: the art style is inspired by
 [Messenger](https://messenger.abeto.co/) (flat cel shading, ink outlines,
 hatched shadows, teal painted sky), set on the real terrain under
@@ -612,11 +618,10 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
 
 Data © OpenStreetMap contributors (ODbL). Elevation: Mapzen / AWS Terrain Tiles.
 
-### 单板姿态
+## License
 
-单板现在分别表现直立滑行、前后刃刻滑、俯身加速、蓄力、收腿平跳、抓板和落地缓冲。
-普通 A / D 只做换刃；按住 Shift 加 A / D 才做深刻滑，前后刃的转向角速度均为普通滑行的两倍。后刃刻滑采用屈膝、折髋前屈的姿态，上身保持抬起；前手保留自然弯曲，仅在够得到雪面时转动手腕、让指尖轻擦，手掌不撑地，右臂自然展开并微屈。前刃刻滑不摸雪，髋部和上身伸展并明显反弓。头部随身体倾斜并看向前方。
-空格蓄力后松开可保持平跳；空中按 A / D 转体，Shift 抓板，X 主动空翻。
-触屏离地后会出现抓板和空翻按钮。
-
-开发预览：`/tools/review/snowboard.html`，可选择男女滑手与经典人物，比较各个姿态的过渡。
+Copyright © 2026 eric1hua. All rights reserved. This project is
+proprietary and is **not** open source: see [LICENSE](LICENSE) for the
+full terms. No copying, modification, redistribution or commercial use
+is permitted without prior written permission. Third-party components
+and data remain under their own licenses, as listed in the LICENSE file.

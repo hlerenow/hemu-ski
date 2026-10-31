@@ -1,0 +1,39 @@
+Copyright (c) 2026 eric1hua. All Rights Reserved.
+
+PROPRIETARY SOFTWARE — NOT OPEN SOURCE
+
+This repository and all of its contents — including but not limited to
+source code, game logic, terrain-baking and production tools, 3D models,
+textures, paintings, audio, baked terrain data, documentation and design
+documents (collectively, the "Software") — are the proprietary and
+confidential property of the copyright holder.
+
+No license is granted. In particular, without the prior written
+permission of the copyright holder, no person may:
+
+  * copy, reproduce or redistribute the Software, in whole or in part;
+  * modify the Software or create derivative works based on it;
+  * use the Software, or any work derived from it, for any commercial
+    purpose, including selling, licensing, publishing, operating or
+    distributing a product or service based on it;
+  * publish the Software on any other platform or repository.
+
+Viewing this repository on GitHub, and forking it through GitHub's
+built-in functionality for the sole purpose of viewing, does not grant
+any right to use the Software for any other purpose.
+
+THIRD-PARTY COMPONENTS
+
+The Software incorporates third-party components that remain under
+their own licenses, which are unaffected by the terms above:
+
+  * three.js — MIT License (see https://github.com/mrdoob/three.js)
+  * Terrain elevation data derived from Copernicus DEM GLO-30
+    (© European Union / Copernicus) — use per Copernicus data terms
+  * Map data (ski runs, lifts) derived from OpenStreetMap
+    (© OpenStreetMap contributors) — ODbL
+
+Only the copyright holder's own original work is covered by the
+proprietary terms above; third-party components may be reused solely
+as permitted by their respective licenses, separately from this
+Software.
