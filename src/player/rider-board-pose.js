@@ -64,6 +64,9 @@ export class BoardPose {
       hPitch: -0.08, kneeOut: 0.1, kneeShift: 0,
       legExtension: mix(0.9, 0.86, heelBlend), crouch: 0.14 };
     for (const [key, target] of Object.entries(tall)) x[key] += (target - x[key]) * deep;
+    // Body +x follows the board's nose, so a negative shift moves the hips
+    // horizontally toward the tail without changing their height.
+    x.px -= 0.06 * deep * heelBlend;
     const toeBlend = deep * (1 - heelBlend);
     x.lRoll -= 0.2 * toeBlend;
     x.lElbow -= 0.2 * toeBlend;
