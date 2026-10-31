@@ -16,7 +16,7 @@ export class BoardPose {
     const touchTarget = deepTarget && lean > 0.55
       ? deepTarget * (s.snowTouch ? 1 : clamp((lean - 0.65) / 0.3) * clamp(((s.speed || 0) - 7) / 5)) : 0;
     const targets = {
-      edge: air ? 0 : lean * speed * (0.35 + deepTarget * 0.95),
+      edge: air ? 0 : lean * speed * (0.35 + deepTarget * (lean > 0 ? 0.7 : 0.95)),
       deep: deepTarget, touch: touchTarget,
       tuck: s.tuck && !air && !s.brake ? 1 : 0,
       compression: Math.max(s.charge || 0, clamp((s.landing || 0) / 0.6), s.brake ? 0.5 : 0),
@@ -53,8 +53,8 @@ export class BoardPose {
     // Toe edge keeps the back arch. Heel contact uses the reference's flexed
     // knees, low left shoulder and relaxed right arm opened up behind it.
     const tall = { py: 0.74 + breath, pz: edge < 0 ? 0.015 : -0.045,
-      pPitch: edge < 0 ? -0.06 * TOE_ARCH : 0.12, pRoll: 0,
-      tPitch: edge < 0 ? -0.16 * TOE_ARCH - 0.12 : 0.22, tYaw: 0.12, tRoll: edge < 0 ? 0 : -0.18,
+      pPitch: edge < 0 ? -0.06 * TOE_ARCH : 0.18, pRoll: 0,
+      tPitch: edge < 0 ? -0.16 * TOE_ARCH - 0.12 : 0.62, tYaw: 0.12, tRoll: edge < 0 ? 0 : -0.18,
       hPitch: -0.08, kneeOut: 0.1, kneeShift: 0,
       legExtension: edge < 0 ? 0.9 : 0.86, crouch: 0.14 };
     for (const [key, target] of Object.entries(tall)) x[key] += (target - x[key]) * deep;

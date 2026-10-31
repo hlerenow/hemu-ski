@@ -750,28 +750,23 @@ export class RiderModel {
     this.root.updateMatrixWorld(true);
   }
 
-  // Light fingertip contact: the wrist/palm stay raised above the snow.
+  // Wrist-only fingertip contact. Keep both arm bones in their posed bend;
+  // if snow is out of reach, leave the entire hand alone instead of planting.
   touchSnowTip(world, normal, weight, side = 'Right') {
     this.root.updateMatrixWorld(true);
-    const names = [side + 'Arm', side + 'ForeArm', side + 'Hand'];
-    const before = names.map(name => this.bones[name].bone.quaternion.clone());
     const hand = this.bones[side + 'Hand'].bone;
     const tip = this.fingerTips[side];
-    if (!tip) return;
+    if (!tip) return false;
     const wrist = hand.getWorldPosition(new THREE.Vector3());
     const length = tip.getWorldPosition(new THREE.Vector3()).distanceTo(wrist);
-    const wristTarget = world.clone().addScaledVector(normal, length);
-    this.#armTo(side, side === 'Left' ? 1 : -1, this.root.worldToLocal(wristTarget), null, true);
-    this.root.updateMatrixWorld(true);
-    hand.getWorldPosition(wrist);
+    const to = world.clone().sub(wrist);
+    if (Math.abs(to.length() - length) > 0.025 || to.dot(normal) >= 0) return false;
+    const before = hand.quaternion.clone();
     const from = tip.getWorldPosition(new THREE.Vector3()).sub(wrist).normalize();
-    const to = world.clone().sub(wrist).normalize();
-    this.#turnWorld(hand, new THREE.Quaternion().setFromUnitVectors(from, to));
-    names.forEach((name, i) => {
-      const bone = this.bones[name].bone;
-      bone.quaternion.slerpQuaternions(before[i], bone.quaternion.clone(), weight);
-    });
+    this.#turnWorld(hand, new THREE.Quaternion().setFromUnitVectors(from, to.normalize()));
+    hand.quaternion.slerpQuaternions(before, hand.quaternion.clone(), weight);
     this.root.updateMatrixWorld(true);
+    return true;
   }
 
   // A world-space hand contact during a fall, layered over the pose.

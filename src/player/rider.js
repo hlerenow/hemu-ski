@@ -630,24 +630,14 @@ export class Rider {
       // Recheck clothing after the arm IK.
       clearGround(this.root, hf);
     }
-    if (this.snowTouch.weight > 0.001 && !this.fall) {
-      // Ground-space IK follows the local snow height, including edited slopes.
-      const shoulder = this.model?.bones.LeftArm.bone || this.armL.sh;
-      shoulder.getWorldPosition(this.snowTouch.target);
+    if (this.snowTouch.weight > 0.001 && !this.fall && this.model?.fingerTips.Left) {
+      // Keep the naturally bent front arm. Only the wrist may turn when its
+      // fingertips already reach the local snow; never pull the arm down.
+      this.model.fingerTips.Left.getWorldPosition(this.snowTouch.target);
       const target = this.snowTouch.target;
-      const inside = new THREE.Vector3(0,1,0).applyQuaternion(this.body.getWorldQuaternion(new THREE.Quaternion()));
-      inside.y = 0;
-      target.addScaledVector(inside.normalize(), 0.18);
-      target.y = hf.heightAt(target.x, target.z) + (this.model ? 0.015 : 0.075);
-      if (this.model) {
-        const normal = hf.normalAt ? hf.normalAt(target.x, target.z, new THREE.Vector3()) : new THREE.Vector3(0, 1, 0);
-        this.model.touchSnowTip(target, normal, this.snowTouch.weight, 'Left');
-      }
-      else {
-        const arm = this.armL, before = [arm.sh.quaternion.clone(), arm.el.quaternion.clone()];
-        this.#grip(arm, this.body.worldToLocal(target.clone()), 1);
-        [arm.sh, arm.el].forEach((joint, i) => joint.quaternion.slerpQuaternions(before[i], joint.quaternion.clone(), this.snowTouch.weight));
-      }
+      target.y = hf.heightAt(target.x, target.z) + 0.015;
+      const normal = hf.normalAt ? hf.normalAt(target.x, target.z, new THREE.Vector3()) : new THREE.Vector3(0, 1, 0);
+      this.model.touchSnowTip(target, normal, this.snowTouch.weight, 'Left');
       clearGround(this.root, hf);
     }
     return lift;
