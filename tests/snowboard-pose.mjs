@@ -75,7 +75,7 @@ try {
   assert(gaze.dot(new THREE.Vector3(0,0,-1)) > 0.99, 'head looks forward');
   const headUp = new THREE.Vector3(0,1,0).applyQuaternion(rider.head.getWorldQuaternion(new THREE.Quaternion()));
   const spineUp = new THREE.Vector3(0,1,0).applyQuaternion(rider.torso.getWorldQuaternion(new THREE.Quaternion()));
-  assert(spineUp.y > 0.65, 'heel carve folds at the hips and keeps the torso up instead of reclining');
+  assert(spineUp.y > 0.35 && rider.torso.rotation.x > rider.hips.rotation.x + 0.5, 'heel carve folds deeply at the waist while keeping the torso above the snow');
   spineUp.addScaledVector(gaze,-spineUp.dot(gaze)).normalize();
   assert(headUp.dot(spineUp) > 0.98, 'head keeps the spine inclination while looking along travel');
   console.log('PASS Shift-only tall toe/heel carves, left-hand heel contact, raised right arm and forward gaze');

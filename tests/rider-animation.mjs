@@ -270,6 +270,8 @@ try {
     assert(new THREE.Vector3(0,1,0).applyQuaternion(oriented).dot(up) > 0.99, `${label} head follows body inclination`);
     const raised = ['RightArm','RightForeArm','RightHand'].map(n=>subject.bones[n].bone.quaternion.clone());
     const front = ['LeftArm','LeftForeArm'].map(n=>subject.bones[n].bone.quaternion.clone());
+    const naturalTip = subject.fingerTips.Left.getWorldPosition(new THREE.Vector3());
+    assert(naturalTip.y < 0.15, `${label} waist fold brings the naturally bent front hand close to snow: ${naturalTip.y.toFixed(3)}`);
     const wrist = subject.bones.LeftHand.bone.getWorldPosition(new THREE.Vector3());
     const length = subject.fingerTips.Left.getWorldPosition(new THREE.Vector3()).distanceTo(wrist);
     const handQ = subject.bones.LeftHand.bone.quaternion.clone();
