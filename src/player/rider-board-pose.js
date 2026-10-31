@@ -64,6 +64,9 @@ export class BoardPose {
       hPitch: -0.08, kneeOut: 0.1, kneeShift: 0,
       legExtension: mix(0.9, 0.86, heelBlend), crouch: 0.14 };
     for (const [key, target] of Object.entries(tall)) x[key] += (target - x[key]) * deep;
+    const toeBlend = deep * (1 - heelBlend);
+    x.lRoll -= 0.2 * toeBlend;
+    x.lElbow -= 0.2 * toeBlend;
     for (const [key, target] of Object.entries({rPitch: -0.35, rRoll: -1.3, rElbow: -0.55})) {
       x[key] += (target - x[key]) * deep * heelBlend;
     }

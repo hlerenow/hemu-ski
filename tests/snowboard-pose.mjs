@@ -34,7 +34,7 @@ for (const fps of [30,60,144]) for (const from of [-1,1]) {
     // Include repeated reversals before the previous pose has settled.
     const lean = (Math.floor(i / (fps / 4)) % 2 ? from : -from);
     const x = p.update(1/fps,{...idle,lean,carve:true});
-    for (const key of ['pPitch','tPitch','tRoll','rPitch','rRoll','rElbow']) {
+    for (const key of ['pPitch','tPitch','tRoll','lPitch','lRoll','lElbow','rPitch','rRoll','rElbow']) {
       peak = Math.max(peak,Math.abs(x[key]-previous[key])*fps);
       assert(Math.abs(x[key]-previous[key]) < 12/fps, `${key} cannot snap when changing edges at ${fps} fps`);
     }
