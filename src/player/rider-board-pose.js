@@ -54,7 +54,7 @@ export class BoardPose {
     // knees, low left shoulder and relaxed right arm opened up behind it.
     const tall = { py: 0.74 + breath, pz: edge < 0 ? 0.015 : -0.045,
       pPitch: edge < 0 ? -0.06 * TOE_ARCH : 0.18, pRoll: 0,
-      tPitch: edge < 0 ? -0.16 * TOE_ARCH - 0.12 : 0.62, tYaw: 0.12, tRoll: edge < 0 ? 0 : -0.18,
+      tPitch: edge < 0 ? -0.16 * TOE_ARCH - 0.12 : 0.9, tYaw: 0.12, tRoll: edge < 0 ? 0 : -0.85,
       hPitch: -0.08, kneeOut: 0.1, kneeShift: 0,
       legExtension: edge < 0 ? 0.9 : 0.86, crouch: 0.14 };
     for (const [key, target] of Object.entries(tall)) x[key] += (target - x[key]) * deep;
