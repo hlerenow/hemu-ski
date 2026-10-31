@@ -15,7 +15,7 @@ assert(pose({ air: true, lean: 1 }).edge === 0, 'neutral air levels the board');
 assert(pose({ air: true, grab: true }).py < pose({ air: true }).py - 0.08, 'grab compresses legs separately from a flip');
 const ordinary = pose({lean:-1}), snow = pose({lean:-1,carve:true,snowTouch:true}), back = pose({lean:1,carve:true});
 assert(Math.abs(ordinary.edge) <= 0.35 && ordinary.touch === 0, 'normal edge changes never deep-carve or touch without Shift');
-assert(snow.edge < -1.2 && back.edge > 1.2, 'deep carves mirror whole-body inclination');
+assert(snow.edge < -1.2 && back.edge > 0.9 && back.edge < 1.15, 'heel edge stays inclined without laying the whole body down');
 assert(snow.py > 0.72 && back.py > 0.72 && snow.tPitch < 0.12 && back.tPitch > 0.15, 'toe arches back while heel contact inclines the torso');
 assert(snow.touch === 0 && back.touch > 0.9, 'only heel carving requests snow contact');
 assert(snow.tPitch < -0.1 && snow.pPitch < 0, 'toe carve extends and arches back instead of folding forward');
@@ -65,16 +65,17 @@ try {
     rider.root.traverse(o=>assert(o.matrixWorld.elements.every(Number.isFinite), 'all joint transforms stay finite'));
   }
   for(let i=0;i<120;i++) rider.update(1/60,{...idle,lean:1,twist:0.5,carve:true,snowTouch:true});
+  const front = [rider.armL.sh.quaternion.clone(), rider.armL.el.quaternion.clone()];
   const raised = [rider.armR.sh.quaternion.clone(), rider.armR.el.quaternion.clone()];
   rider.root.position.set(0,0,0);
   rider.clearGround({heightAt:()=>0});
   [rider.armR.sh,rider.armR.el].forEach((j,i)=>assert(j.quaternion.equals(raised[i]), 'right arm is unchanged by left snow contact'));
-  const hand = rider.armL.el.localToWorld(new THREE.Vector3(0,-0.25,0.01));
-  assert(hand.y < 0.2 && hand.y > -0.02, `left hand touches snow: ${hand.y}`);
+  [rider.armL.sh,rider.armL.el].forEach((j,i)=>assert(j.quaternion.equals(front[i]), 'front arm keeps its natural bend instead of reaching down'));
   const gaze = new THREE.Vector3(0,0,1).applyQuaternion(rider.head.getWorldQuaternion(new THREE.Quaternion()));
   assert(gaze.dot(new THREE.Vector3(0,0,-1)) > 0.99, 'head looks forward');
   const headUp = new THREE.Vector3(0,1,0).applyQuaternion(rider.head.getWorldQuaternion(new THREE.Quaternion()));
   const spineUp = new THREE.Vector3(0,1,0).applyQuaternion(rider.torso.getWorldQuaternion(new THREE.Quaternion()));
+  assert(spineUp.y > 0.65, 'heel carve folds at the hips and keeps the torso up instead of reclining');
   spineUp.addScaledVector(gaze,-spineUp.dot(gaze)).normalize();
   assert(headUp.dot(spineUp) > 0.98, 'head keeps the spine inclination while looking along travel');
   console.log('PASS Shift-only tall toe/heel carves, left-hand heel contact, raised right arm and forward gaze');

@@ -269,16 +269,22 @@ try {
     const oriented = subject.bones.Head.bone.getWorldQuaternion(new THREE.Quaternion()).multiply(subject.bones.Head.modelQ.clone().invert());
     assert(new THREE.Vector3(0,1,0).applyQuaternion(oriented).dot(up) > 0.99, `${label} head follows body inclination`);
     const raised = ['RightArm','RightForeArm','RightHand'].map(n=>subject.bones[n].bone.quaternion.clone());
-    const target = subject.bones.LeftArm.bone.getWorldPosition(new THREE.Vector3());
-    target.addScaledVector(up.clone().setY(0).normalize(),0.18); target.y = 0.015;
-    subject.touchSnowTip(target,new THREE.Vector3(0,1,0),1,'Left');
+    const front = ['LeftArm','LeftForeArm'].map(n=>subject.bones[n].bone.quaternion.clone());
+    const wrist = subject.bones.LeftHand.bone.getWorldPosition(new THREE.Vector3());
+    const length = subject.fingerTips.Left.getWorldPosition(new THREE.Vector3()).distanceTo(wrist);
+    const handQ = subject.bones.LeftHand.bone.quaternion.clone();
+    assert.equal(subject.touchSnowTip(wrist.clone().add(new THREE.Vector3(0,-1,0)),new THREE.Vector3(0,1,0),1,'Left'),false, `${label} unreachable snow never pulls the arm down`);
+    assert(subject.bones.LeftHand.bone.quaternion.equals(handQ), `${label} unreachable snow leaves the wrist alone`);
+    const target = wrist.clone().add(new THREE.Vector3(0,-length,0));
+    assert(subject.touchSnowTip(target,new THREE.Vector3(0,1,0),1,'Left'), `${label} reachable snow gets fingertip-only contact`);
     const tip = subject.fingerTips.Left.getWorldPosition(new THREE.Vector3());
     const palm = subject.palmAt('Left',new THREE.Vector3());
-    assert(Math.abs(tip.y-target.y) < 0.065, `${label} left fingertip brushes snow: ${tip.y.toFixed(3)}`);
+    assert(tip.distanceTo(target) < 0.001, `${label} left fingertip brushes its target`);
     assert(palm.y > tip.y + 0.03, `${label} palm remains above fingertips`);
     ['RightArm','RightForeArm','RightHand'].forEach((n,i)=>assert(subject.bones[n].bone.quaternion.equals(raised[i]), `${label} raised right arm is unchanged by contact`));
+    ['LeftArm','LeftForeArm'].forEach((n,i)=>assert(subject.bones[n].bone.quaternion.equals(front[i]), `${label} front arm retains its original bend`));
     body.remove(subject.root);
-    console.log(`PASS ${label} heel carve: inclined head, left fingertip ${(tip.y*100).toFixed(1)} cm above snow, raised palm, unchanged right arm`);
+    console.log(`PASS ${label} heel carve: wrist-only fingertip touch, raised palm, natural arm bends and no unreachable ground planting`);
   }
 
   joints.forEach((j,i) => { j.position.copy(savedJoints[i].p); j.quaternion.copy(savedJoints[i].q); });
