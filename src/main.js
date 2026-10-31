@@ -754,7 +754,7 @@ let indoors = 0;
 const INDOORS = { dist: 2.4, up: 0.55, ahead: 1.6, look: 0.35 };
 function cameraTarget(out, look) {
   if (firstPerson && state === 'ride' && phys.crashed <= 0) {
-    firstPersonTarget({ eye: rider.eyePosition(eye, camDir), forward: camDir, normal: phys.normal, yaw: mouseLook.yaw, pitch: mouseLook.pitch }, out, look);
+    firstPersonTarget({ eye: rider.eyePosition(eye), forward: camDir, normal: phys.normal, yaw: mouseLook.yaw, pitch: mouseLook.pitch }, out, look);
     out.y = Math.max(out.y, detail.heightAt(out.x, out.z) + 0.12);
     return;
   }
@@ -949,7 +949,7 @@ function updateRideCamera(dt) {
     mouseLook.take();
     cameraTarget(camera.position, camLook);
     camera.lookAt(camLook);
-    camera.fov = 88 + Math.min(sp, 30) * 0.1;
+    camera.fov = 96 + Math.min(sp, 30) * 0.1;
     camera.near = 0.04;
     camera.updateProjectionMatrix();
     return;
@@ -1228,8 +1228,8 @@ function frame() {
   updateWeatherPanel();
 
   // Normal-edge lines fade out by ~600 m, so far geometry can skip that pass.
-  rider.firstPersonBody(firstPerson && state === 'ride' && phys.crashed <= 0);
-  post.render(scene, camera, time, [sky, weather.snowfall.points, spray.points, dog.spray.points, ...(foxes ? [foxes.spray.points] : []), ...(horse ? horse.sprays : []), specks.points, backdrop, ripples.group, ...forest.farMeshes, ...marks.hidden]);
+  const firstPersonId = rider.firstPersonBody(firstPerson && state === 'ride' && phys.crashed <= 0);
+  post.render(scene, camera, time, [sky, weather.snowfall.points, spray.points, dog.spray.points, ...(foxes ? [foxes.spray.points] : []), ...(horse ? horse.sprays : []), specks.points, backdrop, ripples.group, ...forest.farMeshes, ...marks.hidden], firstPersonId);
   rider.firstPersonBody(false);
   requestAnimationFrame(frame);
 }

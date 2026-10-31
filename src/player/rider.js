@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { BoardPose } from './rider-board-pose.js';
 import { makeToon } from '../render/toon.js';
+import { installFirstPersonMask } from '../render/first-person-mask.js';
 import { fallPose, applyFallPose, applyShakePose, placeAssembly, handOnSnow } from './fall.js';
 import { clearGround, rollAssembly } from './rider-contact.js';
 import { THROW, ON_BOARD, sample, throwWeight } from './throw.js';
@@ -148,21 +149,23 @@ function boardGeometry() {
 }
 
 export class Rider {
-  // Head socket plus the eye's offset, measured in metres for either rig.
-  eyePosition(out, forward) {
+  // Mount just above the eyes, on the outward-facing forehead surface.
+  eyePosition(out) {
     this.root.updateMatrixWorld(true);
     const bone = this.model?.bones.Head;
     const head = bone?.bone || this.head;
     const frame = head.getWorldQuaternion(new THREE.Quaternion());
     if (bone) frame.multiply(bone.modelQ.clone().invert());
     head.getWorldPosition(out);
-    out.addScaledVector(new THREE.Vector3(0, 1, 0).applyQuaternion(frame), bone ? 0.12 : 0.2);
-    return out.addScaledVector(forward, 0.1);
+    out.addScaledVector(new THREE.Vector3(0, 1, 0).applyQuaternion(frame), bone ? 0.22 : 0.3);
+    return out.addScaledVector(new THREE.Vector3(0, 0, 1).applyQuaternion(frame), 0.2);
   }
 
   firstPersonBody(enabled) {
     this.head.visible = !enabled;
-    if (this.model) this.model.firstPersonMask.value = enabled ? 1 : 0;
+    this.classicFirstPersonMask.value = enabled ? this.classicFirstPersonMask.id : 0;
+    if (this.model) this.model.firstPersonMask.value = enabled ? this.model.firstPersonMask.id : 0;
+    return enabled ? (this.model?.firstPersonMask || this.classicFirstPersonMask).id : 0;
   }
 
   // `model: true` swaps the primitive body for the rigged Tripo character once
@@ -189,6 +192,7 @@ export class Rider {
     this.bindings = [];
     this.boots = []; // primitive boots and straps, hidden when the model boots stand in them
     this.#buildCharacter();
+    this.classicFirstPersonMask = installFirstPersonMask(this.classic, this.head);
     this.stance = this.feet.map((f) => f.position.clone()); // the feet on the board
     // Skis (see rider-skis.js): one under each boot, turning with the foot,
     // and a pole in each hand. `gear` says which you ride: 'board' or 'ski'.

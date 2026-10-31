@@ -50,7 +50,7 @@ const transition = fps => {
 for (const key of Object.keys(transition(30))) assert(Math.abs(transition(30)[key]-transition(144)[key]) < 1e-8, `frame independent ${key}`);
 const pos = new THREE.Vector3(), look = new THREE.Vector3();
 firstPersonTarget({position: new THREE.Vector3(10, 20, 30), forward: new THREE.Vector3(0,0,-1), crouch: 1, pitch: 0.5}, pos, look);
-assert(pos.y > 21 && pos.y < 21.2 && look.y < pos.y, 'eye height follows crouch and looks down');
+assert(pos.y > 21.1 && pos.y < 21.3 && look.y < pos.y, 'forehead camera height follows crouch and looks down');
 assert(Math.abs(look.x-pos.x) < 1e-8 && look.z < pos.z, 'first person looks along travel');
 const socket = new THREE.Vector3(2, 0.6, -1);
 firstPersonTarget({eye: socket, forward: new THREE.Vector3(0,0,-1)}, pos, look);
@@ -69,9 +69,9 @@ try {
   const {Rider} = await server.ssrLoadModule('/src/player/rider.js');
   const rider = new Rider();
   rider.update(0,idle);
-  const uprightEye = rider.eyePosition(new THREE.Vector3(),new THREE.Vector3(0,0,-1));
+  const uprightEye = rider.eyePosition(new THREE.Vector3());
   for (let i = 0; i < 90; i++) rider.update(1/60,{...idle,tuck:true});
-  const lowEye = rider.eyePosition(new THREE.Vector3(),new THREE.Vector3(0,0,-1));
+  const lowEye = rider.eyePosition(new THREE.Vector3());
   assert(lowEye.y < uprightEye.y - 0.1, 'eye is attached to the posed head rather than a fixed world height');
   rider.firstPersonBody(true);
   assert(!rider.head.visible && rider.classic.visible, 'first person hides the head while retaining arms/body');

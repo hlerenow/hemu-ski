@@ -3,6 +3,7 @@
 // normals. Stable, thin depth/normal edges preserve the ink style without
 // animated sampling offsets or a second halo outside each silhouette.
 import * as THREE from 'three';
+import { patchFirstPersonMaterial } from './first-person-mask.js';
 
 const VERT = /* glsl */ `
 varying vec2 vUv;
@@ -109,6 +110,8 @@ export class InkPost {
     // Imported character/gear materials are DoubleSide. FrontSide normals
     // omitted visible back faces, outlining a different silhouette than color.
     this.normalMat = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
+    this.firstPersonId = { value: 0 };
+    patchFirstPersonMaterial(this.normalMat, this.firstPersonId);
 
     this.material = new THREE.ShaderMaterial({
       vertexShader: VERT,
@@ -147,7 +150,8 @@ export class InkPost {
   }
 
   // `hideForNormals` objects (sky, particles) are skipped in the normal pass.
-  render(scene, camera, time, hideForNormals = []) {
+  render(scene, camera, time, hideForNormals = [], firstPersonId = 0) {
+    this.firstPersonId.value = firstPersonId;
     const r = this.renderer;
     r.setRenderTarget(this.colorRT);
     r.render(scene, camera);

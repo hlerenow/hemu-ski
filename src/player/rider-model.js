@@ -6,7 +6,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { makeToon } from '../render/toon.js';
 import { THROW, ON_FOOT, sample, throwWeight } from './throw.js';
-import { installHeadMask } from './ride-camera.js';
+import { installFirstPersonMask } from '../render/first-person-mask.js';
 
 // Size: by `trunk`, the Hips-to-Head joint length (metres), or else by
 // `height`, the whole model's. The male goes by his trunk, the same as the
@@ -112,7 +112,7 @@ export class RiderModel {
     });
     const missing = DRIVEN.filter((n) => !byName[n]);
     if (missing.length) throw new Error(`${wearing.file} is missing Mixamo bones: ${missing.join(', ')}`);
-    this.firstPersonMask = installHeadMask(scene, byName.Head);
+    this.firstPersonMask = installFirstPersonMask(scene, byName.Head);
     // The trunk, from the Hips joint up to the Head joint (model units): what
     // sizes another set of clothes to the rider's own, since neither a hat nor
     // boots reach it. The rider's own clothes go by their height.
