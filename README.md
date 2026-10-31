@@ -1,5 +1,11 @@
 # Hemu Ski
 
+> **Copyright © 2026 eric1hua. All rights reserved — this is proprietary
+> software, not open source.** See [LICENSE](LICENSE): no copying,
+> modification, redistribution or commercial use without prior written
+> permission. Third-party components (three.js, elevation and map data)
+> remain under their own licenses, as listed in the LICENSE file.
+
 A small Three.js snowboarding experiment: the art style is inspired by
 [Messenger](https://messenger.abeto.co/) (flat cel shading, ink outlines,
 hatched shadows, teal painted sky), set on the real terrain under
@@ -609,3 +615,11 @@ The 3D models in `public/models/` are made in a separate, local-only asset lab
   rotors turn at a speed the eye can follow rather than thousands of rpm.
 
 Data © OpenStreetMap contributors (ODbL). Elevation: Mapzen / AWS Terrain Tiles.
+
+## License
+
+Copyright © 2026 eric1hua. All rights reserved. This project is
+proprietary and is **not** open source: see [LICENSE](LICENSE) for the
+full terms. No copying, modification, redistribution or commercial use
+is permitted without prior written permission. Third-party components
+and data remain under their own licenses, as listed in the LICENSE file.
